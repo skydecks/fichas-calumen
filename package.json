@@ -1,8 +1,8 @@
 {
-  "name": "calumen-fichas-tecnicas",
+  "name": "fichas-tecnicas-vidrio",
   "version": "1.0.0",
   "private": true,
-  "description": "Generador de fichas técnicas de vidrio - CEYCO",
+  "description": "Generador de fichas técnicas de vidrio",
   "port": 3020,
   "scripts": {
     "dev": "next dev -p 3020",

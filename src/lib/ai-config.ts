@@ -75,16 +75,16 @@ function normalizeBaseUrl(source: string): string {
 export function resolveAiConfig(raw: unknown): ResolvedAiConfig {
   const override = normalizeAiOverride(raw);
   const serverBaseUrl = normalizeBaseUrl(
-    process.env.NVIDIA_BASE_URL || DEFAULT_AI_BASE_URL,
+    process.env.AI_BASE_URL || process.env.NVIDIA_BASE_URL || DEFAULT_AI_BASE_URL,
   );
   const hasCustomEndpoint = Boolean(override.baseUrl);
   const baseUrl = hasCustomEndpoint
     ? normalizeBaseUrl(override.baseUrl!)
     : serverBaseUrl;
-  const apiKey = override.apiKey || process.env.NVIDIA_API_KEY || "";
+  const apiKey = override.apiKey || process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || "";
   if (!apiKey) {
     throw new AiConfigError(
-      "No hay una clave de IA configurada. Añádela en Configuración o en NVIDIA_API_KEY del servidor.",
+      "No hay una clave de IA configurada. Añádela en Configuración o en AI_API_KEY del servidor.",
       503,
     );
   }
@@ -99,11 +99,11 @@ export function resolveAiConfig(raw: unknown): ResolvedAiConfig {
     );
   }
 
-  const model = override.model || process.env.NVIDIA_MODEL || DEFAULT_AI_MODEL;
+  const model = override.model || process.env.AI_MODEL || process.env.NVIDIA_MODEL || DEFAULT_AI_MODEL;
   const enableThinking =
     typeof override.thinking === "boolean"
       ? override.thinking
-      : process.env.NVIDIA_ENABLE_THINKING === "true";
+      : (process.env.AI_ENABLE_THINKING ?? process.env.NVIDIA_ENABLE_THINKING) === "true";
   const providerName = override.providerName || DEFAULT_AI_PROVIDER;
 
   return {

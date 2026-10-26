@@ -1,18 +1,17 @@
-# Fichas técnicas de vidrio · CEYCO
+# Fichas técnicas de vidrio
 
-Módulo Next.js para convertir los datos de prestaciones de **Calumen®** en
-fichas técnicas PDF con el formato de `1212.4 HT.pdf`, y para administrar la
-cartera comercial asociada: **clientes, proyectos, agentes de venta y
-especificaciones emitidas**.
+Módulo Next.js para convertir los datos de prestaciones de un configurador de
+vidrio en fichas técnicas PDF, y para administrar la cartera comercial
+asociada: **clientes, proyectos, agentes de venta y especificaciones emitidas**.
 
 ## Funcionalidad
 
-- **Entrada amigable**: se pega el bloque HTML del configurador de Calumen o se
-  arrastra un PDF/HTML para crear la ficha; el analizador detecta
-  automáticamente los apartados, normas, iconos y valores.
-- **Drag & drop**: en **Nueva ficha** puedes soltar un PDF de Calumen o un
+- **Entrada amigable**: se pega el bloque HTML del configurador o se arrastra un
+  PDF/HTML para crear la ficha; el analizador detecta automáticamente los
+  apartados, normas, iconos y valores.
+- **Drag & drop**: en **Nueva ficha** puedes soltar un PDF de prestaciones o un
   archivo HTML/HTM/TXT del configurador sobre la página. El editor carga los
-  datos y SkyDeck ICS propone nombre y campos.
+  datos y el asistente IA propone nombre y campos.
 - **Editor de la ficha**: permite corregir etiquetas y valores, cambiar iconos,
   ocultar apartados del PDF, reordenarlos, añadir filas y composición de capas.
 - **Composición estructurada**: cada capa se precarga desde el configurador con
@@ -24,15 +23,16 @@ especificaciones emitidas**.
 - **PDF limpio**: se omiten las prestaciones sin valor, las secciones vacías,
   los metadatos vacíos y las capas sin material; no se imprimen guiones,
   “N/A” ni placeholders.
-- **PDF fiel al original**: A4 con logos de Calumen y Saint-Gobain, diagrama del
-  acristalamiento, apartados con iconos, pie legal y numeración de página.
+- **PDF fiel al original**: A4 con los logos configurables de la organización y
+  del fabricante, diagrama del acristalamiento, apartados con iconos, pie legal
+  y numeración de página.
 - **Vista previa** antes de guardar, descarga del PDF guardado y duplicado para
   revisiones.
 - **CRM ligero**: clientes, proyectos, agentes y fichas relacionadas, con
   filtros, estados de emisión y borrado en cascada controlado.
-- **Asistente IA con SkyDeck ICS**: consulta el catálogo de fichas guardadas,
-  compara prestaciones, revisa la coherencia frente a las normas y sugiere
-  nombres comerciales o composiciones. También analiza imágenes o capturas.
+- **Asistente IA**: consulta el catálogo de fichas guardadas, compara
+  prestaciones, revisa la coherencia frente a las normas y sugiere nombres
+  comerciales o composiciones. También analiza imágenes o capturas.
 - **Configuración por usuario**: cada navegador/perfil puede definir su propia
   API key, endpoint, modelo, razonamiento y valores predeterminados de las
   fichas nuevas desde **Configuración**. La clave no se guarda en el servidor.
@@ -47,11 +47,16 @@ especificaciones emitidas**.
   prellenar fichas o consultar predicciones en el asistente.
 - **Composición flexible**: plantillas y validación para monolíticos, laminados,
   insulados, multi-laminados, multi-insulados e insulados con laminado.
+- **Interfaz responsiva**: tablas con búsqueda, filtros, ordenamiento y detalle
+  expandible; en pantallas pequeñas el catálogo se presenta en tarjetas.
+- **Modo claro/oscuro**: selector en la cabecera y preferencia guardada por
+  navegador.
+- **Base de conocimiento normativa**: consulta asistida de normas aplicables,
+  con referencia a sus numerales y tablas.
 
 ## Diseño
 
-La interfaz se reconstruyó con los patrones y bloques de **Spectrum UI**
-(extraídos vía su MCP) y adaptados al sistema visual de CEYCO: sidebar,
+La interfaz usa un sistema de componentes y un lenguaje visual propio: sidebar,
 dashboard, tarjetas de métricas, tablas, formularios y el chat del asistente.
 
 ## Stack
@@ -60,8 +65,8 @@ dashboard, tarjetas de métricas, tablas, formularios y el chat del asistente.
 - Tailwind CSS 4
 - Prisma + SQLite
 - `@react-pdf/renderer` para el PDF en el servidor
-- Proveedor de IA configurable (por defecto SkyDeck ICS, modelo Nemotron 3.5
-  VL y API compatible con OpenAI)
+- Proveedor de IA configurable mediante un endpoint compatible con el estándar
+  de chat completions
 
 ## Puesta en marcha
 
@@ -99,14 +104,9 @@ DATABASE_URL="file:./dev.db"
 
 El servidor puede funcionar con una clave global. Cada usuario puede
 sobrescribirla desde **Configuración** con su propia clave, endpoint y modelo.
-La variable de entorno conserva el nombre `NVIDIA_API_KEY` por compatibilidad:
-
-```env
-NVIDIA_API_KEY="nvapi-..."
-# Opcionales:
-# NVIDIA_MODEL="nvidia/nemotron-3.5-super-vl-120b-a12b"
-# NVIDIA_BASE_URL="https://integrate.api.nvidia.com/v1"
-```
+La integración usa variables de entorno para la clave, el modelo, el endpoint y
+el razonamiento; consulta `.env.example` para los nombres exactos y valores de
+ejemplo.
 
 `.env` está excluido de Git; usa `.env.example` como referencia. La clave
 global del servidor nunca se envía al navegador. Si el usuario configura una
@@ -118,29 +118,28 @@ esta aplicación.
 `npm run db:seed` crea:
 
 - 2 clientes, 2 agentes de venta y 2 proyectos.
-- La ficha **1212.4 HT** con los valores del PDF de referencia, lista para
-  abrir, previsualizar y descargar.
+- Una ficha de ejemplo con los valores del PDF de referencia, lista para abrir,
+  previsualizar y descargar.
 
 ## Flujo de uso
 
 1. **Nueva ficha** desde el menú lateral o desde un proyecto. También puedes
-   arrastrar y soltar un PDF de Calumen o un HTML del configurador directamente
-   en el editor; se cargarán los datos y las sugerencias de IA.
+   arrastrar y soltar un PDF de prestaciones o un HTML del configurador
+   directamente en el editor; se cargarán los datos y las sugerencias de IA.
 2. Completa la **referencia/folio** (uso interno), el proyecto, el agente, la
    fecha y las normas. El **nombre comercial del vidrio** es el que se usa como
    título visible del PDF; si se deja vacío, se usa la referencia.
 3. Pega el bloque de prestaciones, el bloque `app-configurator` del
    acristalamiento o ambos, y pulsa **Analizar HTML**.
-   - Como alternativa, pulsa **Subir PDF** en la sección de Calumen y elige un
-     informe de Calumen PDF (texto seleccionable). El sistema extrae los
-     apartados, normas, valores, composición de capas, catálogo y estándar
-     directamente del PDF, sin inventar datos.
-   - Al terminar la importación, **SkyDeck ICS analiza el PDF y propone** un
+   - Como alternativa, pulsa **Subir PDF** y elige un informe PDF con texto
+     seleccionable. El sistema extrae los apartados, normas, valores, composición
+     de capas, catálogo y estándar directamente del PDF, sin inventar datos.
+   - Al terminar la importación, **el asistente IA analiza el PDF y propone** un
      nombre comercial, referencia, catálogo, normas, responsable del cálculo y
      notas internas. Puedes aplicar cada sugerencia por separado o pulsar
      **Aplicar todo**. Nada se guarda automáticamente: la decisión final es
-     tuya. Ejemplo: un PDF de “Templado Monolítico ST150” propone
-     **“ST150 Templado”**.
+     tuya. Ejemplo: un PDF de un vidrio templado monolítico propone un nombre
+     comercial descriptivo.
    - Del bloque de prestaciones se extraen los apartados y valores.
    - Del configurador se extraen el nombre comercial, los materiales, el orden
      de las capas y sus espesores.
@@ -225,7 +224,7 @@ esta aplicación.
 
 ### Composición
 
-El editor incluye plantillas tipo Calumen:
+El editor incluye plantillas de composición:
 
 - Monolítico.
 - Laminado.
@@ -244,7 +243,8 @@ vidrios.
 La página **`/configuracion`** permite ajustar, por navegador/perfil:
 
 - **Proveedores de IA**: guarda varios proveedores; cada uno conserva nombre,
-  endpoint compatible con OpenAI, modelo y API key propia. Puedes marcar uno
+  endpoint compatible con el estándar de chat completions, modelo y API key
+  propia. Puedes marcar uno
   como predeterminado, probar cada conexión y seleccionar el proveedor de una
   conversación desde el chat.
 - **Razonamiento**: activar o desactivar el razonamiento del modelo.
@@ -267,20 +267,13 @@ navegador a PNG para que `@react-pdf` pueda incrustarlos. El logo y los datos
 de identidad se guardan con la ficha al guardarla, por lo que el PDF descargado
 desde el historial conserva la marca usada en ese momento.
 
-## Asistente IA (SkyDeck ICS)
+## Asistente IA
 
 El asistente vive en **`/asistente`** (menú lateral) y también puede abrirse
-desde el editor de una ficha guardada. Usa el modelo
-`nvidia/nemotron-3.5-super-vl-120b-a12b` a través del endpoint compatible con
-OpenAI de SkyDeck ICS:
-
-```
-https://integrate.api.nvidia.com/v1
-```
-
-> **SkyDeck ICS** es la marca visible del proveedor de IA en la interfaz. La
-> integración técnica y las variables `NVIDIA_*` se mantienen sin cambios para
-> no alterar el backend mientras se realiza la migración.
+desde el editor de una ficha guardada. Usa un proveedor de IA configurable a
+través de un endpoint compatible con el estándar de chat completions. El
+proveedor predeterminado se define en el servidor y cada usuario puede
+configurar otro desde **Configuración**.
 
 ### Qué consulta
 
@@ -335,9 +328,9 @@ En **Configuración → Proveedores de IA** puedes:
 ```json
 {
   "data": {
-    "fileName": "ST150 Templado.pdf",
-    "documentTitle": "Templado Monolitico ST150",
-    "layers": [{ "material": "PLANILUX", "thickness": "12mm", "treatment": "Templado" }],
+    "fileName": "ficha-vidrio.pdf",
+    "documentTitle": "Vidrio templado monolítico",
+    "layers": [{ "material": "Vidrio monolítico", "thickness": "12mm", "treatment": "Templado" }],
     "sections": [{ "title": "Factores Luminosos", "rows": [] }],
     "current": { "glassName": "", "reference": "FT-2026-003" }
   }
@@ -349,9 +342,9 @@ y responde con:
 ```json
 {
   "suggestions": [
-    { "field": "glassName", "value": "ST150 Templado", "reason": "..." }
+    { "field": "glassName", "value": "Vidrio templado monolítico", "reason": "..." }
   ],
-  "alternatives": ["ST150 Templado Monolítico"],
+  "alternatives": ["Vidrio templado monolítico"],
   "summary": "..."
 }
 ```
@@ -373,7 +366,7 @@ src/app
   asistente/               Chat del asistente IA
   actions.ts               Server actions del CRM
   api/
-    ai/chat/               Streaming hacia SkyDeck ICS
+    ai/chat/               Streaming hacia el proveedor de IA
     ai/suggest-fields/     Sugerencias de nombre y campos desde un PDF
     ai/test/               Prueba del proveedor de IA configurado
     auth/login/            Inicio de sesión
@@ -388,17 +381,17 @@ src/app
     projects/              CRUD de proyectos
     specs/                 CRUD de fichas
     specs/[id]/pdf/        PDF de una ficha guardada
-    pdf-import/            Importación de un PDF de Calumen
+    pdf-import/            Importación de un PDF del configurador
 src/components
   SpecWorkbench.tsx        Editor + analizador + vista previa
   SettingsPanel.tsx        Configuración de IA y valores por usuario
   ProductImport.tsx        Carga y revisión de fichas de producto
   ProductEditor.tsx        Datos y colores del producto
   LayerColorEditor.tsx     Selector de colores por tipo de capa
-  AiAssistantSpectrum.tsx  Chat del asistente con streaming
+  Asistente IA             Chat del asistente con streaming
   SpecsTable.tsx           Tabla reutilizable de fichas
 src/lib
-  calumen.ts               Parser del HTML de Calumen
+  parser de entrada        Parser del HTML del configurador
   ai-catalog.ts            Contexto de fichas guardadas para la IA
   ai-context.ts            Contexto de la ficha abierta
   ai-config.ts             Resolución de endpoint/modelo/clave y overrides
@@ -439,7 +432,7 @@ Extras de fichas:
 
 - `GET /api/specs/:id/pdf` — PDF de una ficha guardada (`?download=1` fuerza descarga).
 - `POST /api/pdf` — genera una vista previa con datos aún no guardados.
-- `POST /api/pdf-import` — importa un informe PDF de Calumen. Recibe
+- `POST /api/pdf-import` — importa un informe PDF del configurador. Recibe
   `multipart/form-data` con `file` y devuelve secciones, capas, estándar,
   catálogo, título del documento, texto plano y advertencias, sin guardar nada
   en la base de datos.
@@ -464,7 +457,7 @@ Catálogo de productos:
 - `POST /api/products/import` — subir PDF/imagen y extraer un perfil con IA.
 - `POST /api/ai/chat` — asistente técnico con streaming SSE. Recibe
   `{ messages, context, image, ai }`; construye el catálogo de fichas guardadas
-  y llama al proveedor configurado (por defecto SkyDeck ICS). La respuesta usa
+  y llama al proveedor de IA configurado. La respuesta usa
   eventos `reasoning`, `content`, `error` y `done`.
 
 En la interfaz, cada listado incluye acciones de **editar** y **eliminar**,
@@ -477,16 +470,16 @@ npm run test:parser
 npm run test:composition
 ```
 
-El test usa un fixture con la misma estructura Angular que el bloque de
-Calumen y verifica apartados, iconos, normas, filas especiales (notas,
+El test usa un fixture con la misma estructura del bloque del configurador y
+verifica apartados, iconos, normas, filas especiales (notas,
 encabezados, filas ocultas al PDF), composición de capas y proporciones del
 diagrama. También incluye un fixture del bloque `app-configurator` con las
-capas `PLANILUX / PVB STANDARD / PLANILUX`.
+capas de vidrio / butiral / vidrio.
 
 `npm run test:composition` valida el fixture detallado
-`scripts/sample-configurator-detailed.html`: sustrato `PLANILUX 6 mm` templado,
-capa `PLANITHERM HN Tempered #2`, cámara `AIR 12 mm` y segundo sustrato
-`PLANILUX 6 mm`; además comprueba que la capa funcional no sume espesor.
+`scripts/sample-configurator-detailed.html`: sustrato de vidrio de 6 mm
+templado, capa funcional, cámara de aire de 12 mm y segundo sustrato de 6 mm;
+además comprueba que la capa funcional no sume espesor.
 
 También se incluye una prueba E2E opcional del flujo completo (pegar, analizar,
 guardar y previsualizar) con Edge en modo headless:
@@ -512,17 +505,17 @@ proyectos desde la interfaz.
   las barras es proporcional (12 mm / 1.52 mm / 12 mm se dibuja como 24.45 /
   3.1 / 24.45 pt). Si el configurador no informa el espesor de un interlayer, se
   usa 1.52 mm solo para el dibujo y se avisa en la interfaz.
-- Las filas con `pdf-hide` de la web de Calumen que contienen información útil
-  (por ejemplo, la declaración ambiental) sí se conservan; los enlaces y
-  botones se descartan automáticamente.
+- Las filas con `pdf-hide` del configurador que contienen información útil (por
+  ejemplo, la declaración ambiental) sí se conservan; los enlaces y botones se
+  descartan automáticamente.
 - El PDF se genera en el servidor a partir de los datos normalizados, por lo que
   la vista previa incluye cambios aún no guardados.
-- El endpoint de SkyDeck ICS recibe `chat_template_kwargs` directamente en el
+- El endpoint del proveedor recibe `chat_template_kwargs` directamente en el
   cuerpo; no acepta `extra_body` como campo HTTP (el SDK de Python lo fusiona
   internamente, pero aquí usamos `fetch`). El razonamiento del modelo está
   desactivado por defecto para evitar latencia y respuestas incompletas; se
-  activa con `NVIDIA_ENABLE_THINKING=true` y entonces se muestra en un bloque
-  plegable.
+  activa mediante la variable de entorno correspondiente y entonces se muestra
+  en un bloque plegable.
 - Los assets se obtuvieron rasterizando el PDF de referencia con fondo blanco
   para que se incrusten correctamente en `@react-pdf/renderer`.
 
