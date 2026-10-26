@@ -1,0 +1,67 @@
+<app-configure-item>
+  <div class="glazing-config-wrapper">
+    <app-configurator>
+      <div class="glazing-app-configurator">
+        <div class="glazing-schema__visualizer">
+          <div class="glazing-layers">
+            <div class="glazing-layers__item">
+              <div class="is-active">
+                <div class="glass--active glass layer-substrate" title="PLANILUX"></div>
+              </div>
+              <span class="layer-thickness">6</span>
+            </div>
+            <div class="glazing-layers__item">
+              <div class="is-inactive">
+                <div class="glass layer-coating" title="PLANITHERM HN Tempered"></div>
+              </div>
+              <span class="layer-thickness">&nbsp;</span>
+            </div>
+            <div class="glazing-layers__item">
+              <div class="is-inactive">
+                <div class="glass layer-cavity" title="AIR"></div>
+              </div>
+              <span class="layer-thickness">12</span>
+            </div>
+            <div class="glazing-layers__item">
+              <div class="is-inactive">
+                <div class="glass layer-substrate" title="PLANILUX"></div>
+              </div>
+              <span class="layer-thickness">6</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="open-layer-name-wrapper">
+          <h5 class="open-layer-name">6 FT (12 AIR) 6 FT</h5>
+          <h5 class="open-layer-desc">PLANITHERM HN Tempered #2</h5>
+        </div>
+
+        <div class="glazing-configurator">
+          <div class="open-layer open-layer--substrate">
+            <div class="layer-header"><h6 class="layer-name">Sustrato</h6></div>
+            <div class="row gap-3 layer-type-container">
+              <div class="col-12">
+                <label for="layerType">Tipo</label>
+                <span class="p-dropdown-label">PLANILUX</span>
+              </div>
+              <div class="col-12">
+                <label for="layerThickness">Espesor</label>
+                <span class="p-dropdown-label"> 6 mm </span>
+              </div>
+              <div class="col-12">
+                <label for="layerTreatment">Tratamiento térmico</label>
+                <span class="p-dropdown-label">Templado</span>
+              </div>
+              <div class="col-12 text-center">
+                <div class="form-check form-switch">
+                  <label for="substrateLaminated" class="form-check-label">Laminar</label>
+                  <input type="checkbox" id="substrateLaminated" class="form-check-input" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </app-configurator>
+  </div>
+</app-configure-item>

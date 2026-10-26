@@ -1,0 +1,65 @@
+<app-configurator>
+  <div class="glazing-app-configurator">
+    <div class="glazing-schema__visualizer">
+      <div class="d-flex flex-column align-items-center">
+        <span data-icon="outside-icon" class="glazing-schema__icon"></span>
+        <span class="icon-text">Externo</span>
+      </div>
+      <div class="glazing-layers">
+        <div class="glazing-layers__item ng-star-inserted">
+          <div class="is-inactive">
+            <div title="PLANILUX" class="glass layer-substrate ng-star-inserted"></div>
+          </div>
+          <span class="layer-thickness">12</span>
+        </div>
+        <div class="glazing-layers__item ng-star-inserted">
+          <div class="is-inactive">
+            <div title="PVB STANDARD" class="glass layer-interlayer ng-star-inserted"></div>
+          </div>
+          <span class="layer-thickness">&nbsp;</span>
+        </div>
+        <div class="glazing-layers__item ng-star-inserted">
+          <div class="is-active">
+            <div class="glass--active glass layer-substrate ng-star-inserted" title="PLANILUX"></div>
+          </div>
+          <span class="layer-thickness">12</span>
+        </div>
+      </div>
+      <div class="d-flex flex-column align-items-center">
+        <span data-icon="inside-icon" class="glazing-schema__icon"></span>
+        <span class="icon-text">Interno</span>
+      </div>
+    </div>
+
+    <div class="open-layer-name-wrapper">
+      <h5 class="open-layer-name">1212.4 HT</h5>
+    </div>
+
+    <div class="glazing-configurator">
+      <div class="open-layer open-layer--substrate">
+        <div class="layer-header"><h6 class="layer-name">Sustrato</h6></div>
+        <div class="row gap-3 layer-type-container">
+          <div class="col-12">
+            <label for="layerType">Tipo</label>
+            <span class="p-dropdown-label">PLANILUX</span>
+          </div>
+          <div class="col-12">
+            <label for="layerThickness">Espesor</label>
+            <span class="p-dropdown-label"> 12 mm </span>
+          </div>
+          <div class="col-12">
+            <label for="layerTreatment">Tratamiento térmico</label>
+            <span class="p-dropdown-label">Termoendurecido</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="closed-layer closed-layer--interlayer closed-layer--left">
+        <div class="cube" title="PVB STANDARD">
+          <div class="front"><div class="text-vertical text-vertical--left">Butiral</div></div>
+          <div class="layer-side"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</app-configurator>

@@ -1,0 +1,204 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { deleteProductAction } from "@/app/actions";
+import { ConfirmButton } from "@/components/SubmitButton";
+import { IconArrowLeft, IconSparkles, IconTrash } from "@/components/icons";
+import ProductEditor from "@/components/ProductEditor";
+import ProductPager from "@/components/ProductPager";
+import { PageHeader } from "@/components/ui";
+import { glassLayerBars, layerLabel } from "@/lib/calumen";
+import { prisma } from "@/lib/db";
+import { productToProfile } from "@/lib/products";
+import { colorForLayer } from "@/lib/types";
+import { formatDateTime } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
+
+export default async function ProductDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const product = await prisma.product.findUnique({ where: { id } });
+  if (!product) notFound();
+
+  const [previous, next] = await Promise.all([
+    prisma.product.findFirst({
+      where: {
+        OR: [
+          { updatedAt: { gt: product.updatedAt } },
+          { updatedAt: product.updatedAt, id: { gt: product.id } },
+        ],
+      },
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+      select: { id: true, name: true },
+    }),
+    prisma.product.findFirst({
+      where: {
+        OR: [
+          { updatedAt: { lt: product.updatedAt } },
+          { updatedAt: product.updatedAt, id: { lt: product.id } },
+        ],
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const record = productToProfile(product);
+  const bars = glassLayerBars(record.layers, { minWidth: 2 });
+
+  return (
+    <div>
+      <Link
+        href="/productos"
+        className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800"
+      >
+        <IconArrowLeft width={14} height={14} />
+        Volver a productos
+      </Link>
+
+      <PageHeader
+        eyebrow={`${record.category || "Producto"} · ${record.manufacturer || "Catálogo"}`}
+        title={record.name}
+        subtitle={`${record.code || "Sin código"} · Actualizado ${formatDateTime(record.updatedAt)}`}
+        actions={
+          <>
+            <ProductPager previous={previous} next={next} />
+            <Link
+              href={`/asistente?productId=${product.id}`}
+              className="btn-secondary"
+            >
+              <IconSparkles width={16} height={16} />
+              Consultar con IA
+            </Link>
+            <form action={deleteProductAction}>
+              <input type="hidden" name="id" value={product.id} />
+              <ConfirmButton
+                message={`¿Eliminar el producto ${record.name} del catálogo?`}
+                title="Eliminar producto"
+                className="btn-danger"
+              >
+                <IconTrash width={16} height={16} />
+                Eliminar
+              </ConfirmButton>
+            </form>
+          </>
+        }
+      />
+
+      <div className="grid items-start gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <section className="card card-pad">
+          <h2 className="h-section mb-4">Datos del producto</h2>
+          <ProductEditor product={record} />
+        </section>
+
+        <div className="space-y-4">
+          <section className="card card-pad">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="h-section">Composición</h2>
+              <span className="chip">{record.layers.length} capas</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Ext.
+              </span>
+              <div className="flex h-12 flex-1 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2">
+                {bars.map((bar, index) => {
+                  const color = colorForLayer(record.layers[index]);
+                  return (
+                    <div
+                      key={index}
+                      className="h-9 rounded-[1px] border"
+                      style={{
+                        width: bar.width,
+                        backgroundColor: color,
+                        borderColor: color,
+                      }}
+                      title={layerLabel(record.layers[index])}
+                    />
+                  );
+                })}
+              </div>
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Int.
+              </span>
+            </div>
+            <ol className="mt-3 space-y-1.5">
+              {record.layers.map((layer, index) => (
+                <li key={index} className="flex items-center gap-2 text-xs">
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-sm border"
+                    style={{
+                      backgroundColor: colorForLayer(layer),
+                      borderColor: colorForLayer(layer),
+                    }}
+                  />
+                  <span className="text-slate-700">{layerLabel(layer)}</span>
+                </li>
+              ))}
+            </ol>
+            {record.layers.length === 0 ? (
+              <p className="text-xs text-slate-400">Sin composición detectada.</p>
+            ) : null}
+          </section>
+
+          <section className="card card-pad">
+            <h2 className="h-section">Valores y prestaciones</h2>
+            <div className="mt-3 space-y-3">
+              {record.sections.length === 0 ? (
+                <p className="text-xs text-slate-400">Sin prestaciones.</p>
+              ) : (
+                record.sections.map((section) => (
+                  <div key={section.id}>
+                    <p className="text-xs font-semibold text-slate-800">
+                      {section.title}
+                      {section.standard ? (
+                        <span className="ml-2 text-[10px] font-normal text-slate-400">
+                          {section.standard}
+                        </span>
+                      ) : null}
+                    </p>
+                    <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
+                      {section.rows
+                        .filter((row) => row.value)
+                        .map((row) => (
+                          <p key={row.id} className="flex justify-between gap-2">
+                            <span>{row.label}</span>
+                            <strong>{row.value}</strong>
+                          </p>
+                        ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="card card-pad">
+            <h2 className="h-section">Representación de colores</h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {Object.entries(record.colors).map(([key, value]) => (
+                <span
+                  key={key}
+                  className="flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-1 text-[10px] text-slate-600"
+                >
+                  <span
+                    className="h-3 w-3 rounded-full border"
+                    style={{ backgroundColor: value, borderColor: value }}
+                  />
+                  {key}
+                </span>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] text-slate-400">
+              Se aplican al seleccionar este producto en una ficha y al generar
+              su PDF.
+            </p>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}

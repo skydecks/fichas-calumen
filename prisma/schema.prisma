@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id          String    @id @default(cuid())
+  name        String
+  company     String?
+  email       String?
+  phone       String?
+  address     String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  projects    Project[]
+}
+
+model SalesAgent {
+  id         String    @id @default(cuid())
+  name       String
+  email      String?
+  phone      String?
+  region     String?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  projects   Project[]
+  specs      Specification[]
+}
+
+model Project {
+  id          String         @id @default(cuid())
+  name        String
+  code        String?
+  location    String?
+  clientId    String
+  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  agentId     String?
+  agent       SalesAgent?    @relation(fields: [agentId], references: [id])
+  status      String         @default("BORRADOR")
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  specs       Specification[]
+}
+
+model Specification {
+  id           String      @id @default(cuid())
+  reference    String
+  projectId    String
+  project      Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentId      String?
+  agent        SalesAgent?  @relation(fields: [agentId], references: [id])
+  glassName    String      @default("")
+  glassLayers  String      @default("[]")
+  rawHtml      String?
+  data         String      @default("{}")
+  catalog      String?
+  standard     String?
+  calculatedBy String?
+  calculatedAt DateTime?
+  issuedAt     DateTime    @default(now())
+  status       String      @default("BORRADOR")
+  version      Int         @default(1)
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([projectId])
+  @@index([reference])
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  name         String
+  code         String   @default("")
+  category     String?
+  manufacturer String?
+  description  String?
+  layers       String   @default("[]")
+  sections     String   @default("[]")
+  keyValues    String   @default("{}")
+  colors       String   @default("{}")
+  summary      String?
+  sourceName   String?
+  sourceType   String?
+  rawText      String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([name])
+  @@index([code])
+  @@index([active])
+}
