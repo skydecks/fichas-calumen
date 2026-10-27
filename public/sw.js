@@ -1,5 +1,5 @@
-/* Calumen service worker: shell, static assets and offline fallback. */
-const VERSION = "calumen-pwa-v2";
+/* Service worker: application shell, static assets and offline fallback. */
+const VERSION = "fichas-pwa-v3";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const PRECACHE = [
@@ -9,7 +9,6 @@ const PRECACHE = [
   "/assets/pwa/icon-512.png",
   "/assets/pwa/icon-maskable-512.png",
   "/assets/pwa/apple-touch-icon.png",
-  "/assets/logo-calumen.png",
 ];
 
 self.addEventListener("install", (event) => {
