@@ -27,6 +27,7 @@ const labels: Record<string, string> = {
   "/productos": "Productos",
   "/asistente": "Asistente IA",
   "/conocimiento": "Conocimiento",
+  "/conocimiento/nuevo": "Nuevo artículo",
   "/configuracion": "Configuración",
 };
 
@@ -37,6 +38,7 @@ function getLabel(pathname: string): string {
   if (pathname.startsWith("/agentes/")) return "Detalle de agente";
   if (pathname.startsWith("/fichas/")) return "Editar ficha";
   if (pathname.startsWith("/productos/")) return "Detalle de producto";
+  if (pathname.startsWith("/conocimiento/")) return "Artículo de conocimiento";
   return "Fichas técnicas";
 }
 

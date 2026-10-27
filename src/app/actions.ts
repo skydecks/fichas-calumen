@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { deleteKnowledgeDocument, saveKnowledgeDocument } from "@/lib/ai-knowledge";
 import { SPEC_STATUSES, type SpecStatus } from "@/lib/types";
 
 function text(form: FormData, key: string): string {
@@ -279,4 +280,65 @@ export async function deleteProductAction(form: FormData) {
     revalidatePath("/");
   }
   redirect("/productos");
+}
+
+/* -------------------------- Base de Conocimiento ------------------------- */
+
+export async function createKnowledgeArticleAction(form: FormData) {
+  const title = text(form, "title");
+  const fileName = text(form, "fileName");
+  const content = text(form, "content");
+  const subtitle = text(form, "subtitle");
+
+  if (!title || !content) {
+    redirect("/conocimiento/nuevo?error=campos_requeridos");
+  }
+
+  const saved = saveKnowledgeDocument({
+    title,
+    subtitle: nullable(subtitle) ?? undefined,
+    fileName: nullable(fileName) ?? undefined,
+    content,
+  });
+
+  revalidatePath("/conocimiento");
+  revalidatePath("/asistente");
+  redirect(`/conocimiento/${encodeURIComponent(saved.id)}?creado=1`);
+}
+
+export async function updateKnowledgeArticleAction(form: FormData) {
+  const originalFileName = text(form, "originalFileName");
+  const title = text(form, "title");
+  const content = text(form, "content");
+  const subtitle = text(form, "subtitle");
+
+  if (!originalFileName || !title || !content) {
+    redirect("/conocimiento");
+  }
+
+  const saved = saveKnowledgeDocument({
+    fileName: originalFileName,
+    title,
+    subtitle: nullable(subtitle) ?? undefined,
+    content,
+  });
+
+  revalidatePath("/conocimiento");
+  revalidatePath(`/conocimiento/${encodeURIComponent(saved.id)}`);
+  revalidatePath("/asistente");
+  redirect(`/conocimiento/${encodeURIComponent(saved.id)}?guardado=1`);
+}
+
+export async function deleteKnowledgeArticleAction(form: FormData) {
+  const fileName = text(form, "fileName");
+  if (fileName) {
+    try {
+      deleteKnowledgeDocument(fileName);
+      revalidatePath("/conocimiento");
+      revalidatePath("/asistente");
+    } catch {
+      // Ignorar si está protegido
+    }
+  }
+  redirect("/conocimiento?eliminado=1");
 }
