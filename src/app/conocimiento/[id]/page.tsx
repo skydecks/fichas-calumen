@@ -23,6 +23,7 @@ import { SpectrumCard } from "@/components/spectrum/card";
 import { ConfirmButton } from "@/components/SubmitButton";
 import { deleteKnowledgeArticleAction } from "@/app/actions";
 import { formatDate } from "@/lib/utils";
+import { KnowledgeArticleViewer } from "@/components/KnowledgeArticleViewer";
 
 export const dynamic = "force-dynamic";
 
@@ -162,15 +163,12 @@ export default async function KnowledgeDetailPage({
         ) : null}
       </div>
 
-      {/* Contenido Renderizado */}
-      <SpectrumCard padding="md">
-        <div className="prose prose-slate max-w-none">
-          <AiMarkdown
-            content={body}
-            className="text-[13px] text-slate-700 leading-relaxed"
-          />
-        </div>
-      </SpectrumCard>
+      {/* Visor con Tabla de Contenidos Automática y Modo Zen */}
+      <KnowledgeArticleViewer
+        content={body}
+        title={meta.title}
+        subtitle={meta.subtitle}
+      />
     </div>
   );
 }

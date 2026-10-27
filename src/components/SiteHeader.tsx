@@ -16,6 +16,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/ThemeToggle";
 import InstallAppButton from "@/components/InstallAppButton";
+import { GlobalSearchDialog } from "@/components/GlobalSearchDialog";
 
 const labels: Record<string, string> = {
   "/": "Inicio",
@@ -28,6 +29,7 @@ const labels: Record<string, string> = {
   "/asistente": "Asistente IA",
   "/conocimiento": "Conocimiento",
   "/conocimiento/nuevo": "Nuevo artículo",
+  "/conocimiento/comparar": "Comparativa técnica",
   "/configuracion": "Configuración",
 };
 
@@ -71,6 +73,7 @@ export default function SiteHeader() {
         </Breadcrumb>
       </div>
       <div className="flex items-center gap-2 px-4">
+        <GlobalSearchDialog />
         <InstallAppButton />
         <ThemeToggle className="icon-btn h-8 w-8 border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" />
         <Button asChild size="sm">

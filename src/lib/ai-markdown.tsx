@@ -1,5 +1,23 @@
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { enhanceTextWithGlossary } from "./technical-glossary";
+
+function processChildren(children: React.ReactNode): React.ReactNode {
+  if (typeof children === "string") {
+    return enhanceTextWithGlossary(children);
+  }
+  if (Array.isArray(children)) {
+    return children.map((child, idx) =>
+      typeof child === "string" ? (
+        <React.Fragment key={idx}>{enhanceTextWithGlossary(child)}</React.Fragment>
+      ) : (
+        child
+      ),
+    );
+  }
+  return children;
+}
 
 export function AiMarkdown({
   content,
@@ -14,7 +32,9 @@ export function AiMarkdown({
         remarkPlugins={[remarkGfm]}
         components={{
           p: ({ children }) => (
-            <p className="mb-2 leading-relaxed last:mb-0">{children}</p>
+            <p className="mb-2 leading-relaxed last:mb-0">
+              {processChildren(children)}
+            </p>
           ),
           strong: ({ children }) => (
             <strong className="font-semibold text-slate-900">{children}</strong>
@@ -46,9 +66,13 @@ export function AiMarkdown({
           ol: ({ children }) => (
             <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>
           ),
-          li: ({ children }) => <li className="pl-0.5">{children}</li>,
+          li: ({ children }) => (
+            <li className="pl-0.5">{processChildren(children)}</li>
+          ),
           blockquote: ({ children }) => (
-            <blockquote className="my-2 border-l-2 border-brand-300 pl-3 text-slate-600">{children}</blockquote>
+            <blockquote className="my-2 border-l-2 border-brand-300 pl-3 text-slate-600">
+              {children}
+            </blockquote>
           ),
           hr: () => <hr className="my-3 border-slate-200" />,
           a: ({ href, children }) => {
@@ -61,7 +85,7 @@ export function AiMarkdown({
                 <a
                   href={href}
                   className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 border border-brand-200 transition-colors mx-0.5 no-underline"
-                  title="Abrir artículo en la base de conocimiento de Calumen"
+                  title="Abrir artículo en la base de conocimiento"
                 >
                   <span className="text-[10px]">📖</span>
                   <span>{children}</span>
@@ -80,20 +104,30 @@ export function AiMarkdown({
             );
           },
           code: ({ children }) => (
-            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">{children}</code>
+            <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">
+              {children}
+            </code>
           ),
           pre: ({ children }) => (
-            <pre className="my-2 overflow-x-auto rounded-lg bg-slate-900 p-2.5 text-[10.5px] leading-relaxed text-slate-100 [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-inherit">{children}</pre>
+            <pre className="my-2 overflow-x-auto rounded-lg bg-slate-900 p-2.5 text-[10.5px] leading-relaxed text-slate-100 [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-inherit">
+              {children}
+            </pre>
           ),
           table: ({ children }) => (
-            <div className="my-2 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full border-collapse text-[11px]">{children}</table></div>
+            <div className="my-2 overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full border-collapse text-[11px]">{children}</table>
+            </div>
           ),
           thead: ({ children }) => <thead className="bg-slate-50">{children}</thead>,
           th: ({ children }) => (
-            <th className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold text-slate-700">{children}</th>
+            <th className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold text-slate-700">
+              {children}
+            </th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-slate-100 px-2 py-1.5 align-top">{children}</td>
+            <td className="border-b border-slate-100 px-2 py-1.5 align-top">
+              {processChildren(children)}
+            </td>
           ),
         }}
       >
