@@ -11,7 +11,7 @@ import {
   View,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import { glassLayerBars, pdfSafe } from "@/lib/calumen";
+import { glassLayerBars, pdfSafe, thicknessMm } from "@/lib/calumen";
 import { colorForLayer } from "@/lib/types";
 import type { GlassLayer, PerfRow, SpecData } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -387,19 +387,88 @@ function SpecDocument({ data }: Props) {
               <Image src={asset("icon-exterior.png")} style={styles.sideIcon} />
               {layers.length > 0 ? (
                 <View style={styles.panes}>
-                  {bars.map((bar, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.pane,
-                        {
-                          width: bar.width,
-                          backgroundColor: colorForLayer(layers[index]),
-                          borderColor: colorForLayer(layers[index]),
-                        },
-                      ]}
-                    />
-                  ))}
+                  {bars.map((bar, index) => {
+                    const layer = layers[index];
+                    const kind = layer.kind || (layer.material.toLowerCase().includes("air") ? "air" : "substrate");
+                    const isCoating = kind === "coating";
+                    const isCavity = kind === "air" || kind === "cavity";
+                    const isInterlayer = kind === "interlayer";
+                    const th = thicknessMm(layer);
+
+                    if (isCoating) {
+                      return (
+                        <View
+                          key={index}
+                          style={{
+                            width: 2.5,
+                            height: 38,
+                            backgroundColor: "#dc2626",
+                            marginHorizontal: 0.5,
+                          }}
+                        />
+                      );
+                    }
+
+                    if (isCavity) {
+                      return (
+                        <View
+                          key={index}
+                          style={{
+                            width: Math.max(16, bar.width * 1.2),
+                            height: 38,
+                            backgroundColor: "#f1f5f9",
+                            borderWidth: 0.5,
+                            borderColor: "#cbd5e1",
+                            borderStyle: "dashed",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <View style={{ width: "90%", height: 3, backgroundColor: "#334155" }} />
+                          <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: "#475569" }}>
+                            {th || 12}
+                          </Text>
+                          <View style={{ width: "90%", height: 3, backgroundColor: "#334155" }} />
+                        </View>
+                      );
+                    }
+
+                    if (isInterlayer) {
+                      return (
+                        <View
+                          key={index}
+                          style={{
+                            width: Math.max(6, bar.width),
+                            height: 38,
+                            backgroundColor: "#7dd3fc",
+                            borderWidth: 0.5,
+                            borderColor: "#38bdf8",
+                            justifyContent: "center",
+                            alignItems: "center",
+                          }}
+                        />
+                      );
+                    }
+
+                    return (
+                      <View
+                        key={index}
+                        style={{
+                          width: Math.max(14, bar.width * 1.1),
+                          height: 38,
+                          backgroundColor: "#dbeafe",
+                          borderWidth: 0.8,
+                          borderColor: "#60a5fa",
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: "#1e3a8a" }}>
+                          {th || 6}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
               ) : null}
               <Image src={asset("icon-interior.png")} style={styles.sideIcon} />

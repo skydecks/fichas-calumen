@@ -1,4 +1,5 @@
 "use client";
+import { GlassCompositionDiagram } from "@/components/GlassCompositionDiagram";
 
 import { useMemo, useState } from "react";
 import {
@@ -496,79 +497,12 @@ export default function ProductCompositionEditor({
           </details>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Vista de capas
-            </p>
-            <span className="chip bg-white">Espesor {analysis.totalThickness}</span>
-          </div>
-          {layers.length > 0 ? (
-            <>
-              <div className="mt-3 flex items-center gap-1.5">
-                <img
-                  src="/assets/icon-exterior.png"
-                  alt="Exterior"
-                  className="h-4 w-4 shrink-0 object-contain opacity-60"
-                />
-                <div className="flex h-12 flex-1 items-center justify-center gap-[2px] rounded-lg border border-slate-200 bg-white px-2">
-                  {bars.map((bar, index) => {
-                    const color = colorOf(layers[index]);
-                    return (
-                      <div
-                        key={index}
-                        className="h-9 rounded-[1px] border"
-                        style={{
-                          width: bar.width,
-                          backgroundColor: color,
-                          borderColor: color,
-                        }}
-                        title={layerLabel(layers[index])}
-                      />
-                    );
-                  })}
-                </div>
-                <img
-                  src="/assets/icon-interior.png"
-                  alt="Interior"
-                  className="h-4 w-4 shrink-0 object-contain opacity-60"
-                />
-              </div>
-              <p className="mt-1.5 text-center text-[10px] text-slate-400">
-                Ancho proporcional al espesor de cada capa
-              </p>
-              <p className="mt-0.5 text-center text-[10px] text-slate-500">
-                {analysis.summary}
-              </p>
-            </>
-          ) : null}
-          {layers.length === 0 ? (
-            <p className="mt-3 text-xs italic text-slate-400">
-              Aún no hay capas definidas.
-            </p>
-          ) : (
-            <ol className="mt-3 space-y-2">
-              {layers.map((layer, index) => (
-                <li key={index} className="flex items-start gap-2">
-                  <span
-                    className="mt-0.5 h-5 w-5 shrink-0 rounded-md border"
-                    style={{
-                      backgroundColor: colorOf(layer),
-                      borderColor: colorOf(layer),
-                    }}
-                  />
-                  <span className="min-w-0 text-xs leading-5 text-slate-700">
-                    <span className="block font-medium">{layerLabel(layer)}</span>
-                    <span className="text-[10px] text-slate-400">
-                      {kindLabel(layerKindOf(layer))}
-                      {layer.position ? ` · #${layer.position}` : ""}
-                      {layer.laminated ? " · Laminado" : ""}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
+        <div className="space-y-3">
+          <GlassCompositionDiagram
+            layers={layers}
+            interactive={true}
+            showSummary={true}
+          />
         </div>
       </div>
 

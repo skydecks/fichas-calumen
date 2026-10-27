@@ -1,3 +1,4 @@
+import { GlassCompositionDiagram } from "@/components/GlassCompositionDiagram";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen } from "lucide-react";
@@ -109,48 +110,11 @@ export default async function ProductDetailPage({
               <h2 className="h-section">Composición</h2>
               <span className="chip">{record.layers.length} capas</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Ext.
-              </span>
-              <div className="flex h-12 flex-1 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2">
-                {bars.map((bar, index) => {
-                  const color = colorForLayer(record.layers[index]);
-                  return (
-                    <div
-                      key={index}
-                      className="h-9 rounded-[1px] border"
-                      style={{
-                        width: bar.width,
-                        backgroundColor: color,
-                        borderColor: color,
-                      }}
-                      title={layerLabel(record.layers[index])}
-                    />
-                  );
-                })}
-              </div>
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Int.
-              </span>
-            </div>
-            <ol className="mt-3 space-y-1.5">
-              {record.layers.map((layer, index) => (
-                <li key={index} className="flex items-center gap-2 text-xs">
-                  <span
-                    className="h-3 w-3 shrink-0 rounded-sm border"
-                    style={{
-                      backgroundColor: colorForLayer(layer),
-                      borderColor: colorForLayer(layer),
-                    }}
-                  />
-                  <span className="text-slate-700">{layerLabel(layer)}</span>
-                </li>
-              ))}
-            </ol>
-            {record.layers.length === 0 ? (
-              <p className="text-xs text-slate-400">Sin composición detectada.</p>
-            ) : null}
+            <GlassCompositionDiagram
+              layers={record.layers}
+              interactive={false}
+              showSummary={true}
+            />
           </section>
 
           <section className="card card-pad">
