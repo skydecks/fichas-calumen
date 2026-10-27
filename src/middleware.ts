@@ -6,6 +6,9 @@ import {
 
 const PUBLIC_PATHS = new Set([
   "/login",
+  "/offline",
+  "/manifest.webmanifest",
+  "/sw.js",
   "/api/auth/login",
   "/api/auth/logout",
 ]);
