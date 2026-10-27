@@ -14,10 +14,10 @@ interface PageCluster {
   items: PdfTextItem[];
 }
 
-function clusterByLine(items: PdfTextItem[]): PageCluster[] {
+function clusterByLine(items: PdfTextItem[], tolerance = 2.5): PageCluster[] {
   const lines: PageCluster[] = [];
   for (const item of items) {
-    let line = lines.find((l) => Math.abs(l.y - item.y) < 2);
+    let line = lines.find((l) => Math.abs(l.y - item.y) < tolerance);
     if (!line) {
       line = { y: item.y, items: [] };
       lines.push(line);
@@ -50,7 +50,8 @@ function normalizeThickness(raw: string): string | undefined {
 }
 
 function sectionKey(title: string): string {
-  const t = title.normalize("NFD")
+  const t = title
+    .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
@@ -68,7 +69,7 @@ function sectionKey(title: string): string {
   return `custom_${t.replace(/ /g, "_") || "seccion"}`;
 }
 
-const SECTION_TITLES = [
+const CANONICAL_SECTION_TITLES = [
   "Factores Luminosos",
   "Factores Energéticos",
   "Factores Solares",
@@ -79,19 +80,12 @@ const SECTION_TITLES = [
   "Resistencia antiagresión",
   "Dimensiones de fabricación",
   "Sostenibilidad",
-  "Huella de carbono",
-  "Potencial de calentamiento global",
-  "Espesor nominal",
-  "Peso",
 ];
 
-function isSectionTitle(text: string): boolean {
-  return SECTION_TITLES.some((t) => text === t || text.startsWith(t + " ") || text.includes(" " + t));
-}
-
 /**
- * Extrae secciones, capas y metadatos del texto de una página de Calumen PDF.
- * No inventa valores: solo lo que está impreso en el PDF.
+ * Extrae secciones, capas y metadatos del texto de un PDF de Calumen.
+ * Soporta de forma nativa vidrios monolíticos, laminados, e insulados (doble/triple acristalamiento DGU/TGU)
+ * con capas de control solar/bajo emisivo y cámaras de aire/argón.
  */
 export function parseCalumenPdfText(
   items: PdfTextItem[],
@@ -105,158 +99,279 @@ export function parseCalumenPdfText(
   rawText: string;
 } {
   const warnings: string[] = [];
-  const lines = clusterByLine(items);
 
-  const documentTitle =
-    lines
-      .filter((line) => line.y > 700 && (line.items[0]?.x ?? 999) < 300)
-      .map((line) => textOf(line.items))
-      .find(
-        (text) =>
-          text.length > 1 &&
-          !/^(Calculado|Tipo de acristalamiento|Página|Calumen)/i.test(text),
-      ) ??
-    lines
-      .map((line) => textOf(line.items))
-      .find(
-        (text) =>
-          text.length > 1 &&
-          !/^(Calculado|Tipo de acristalamiento|Página|Calumen|Datos de prestaciones)/i.test(text),
-      );
+  // 1. HEADER SUPERIOR (y >= 735): Título del documento, capa comercial y metadatos
+  const headerItems = items.filter((i) => i.y >= 735);
+  const headerLines = clusterByLine(headerItems);
 
-  const rawText = lines
-    .map((line) => textOf(line.items))
-    .filter(Boolean)
-    .join("\n")
-    .slice(0, 30000);
+  let documentTitle = "";
+  let coatingMaterial = "";
+  let coatingPosition: number | undefined = undefined;
 
-  const sections: PerfSection[] = [];
-  let currentSection: PerfSection | null = null;
-  const layers: GlassLayer[] = [];
-
-  for (const line of lines) {
-    // Umbral: x<250 = columna izquierda (capas / vidrio), x>=250 = derecha (secciones / filas)
-    const leftItems = line.items.filter((i) => i.x < 250);
-    const rightItems = line.items.filter((i) => i.x >= 250);
-    const leftText = textOf(leftItems);
-    const rightText = textOf(rightItems);
-    const full = `${leftText} ${rightText}`.trim();
-
-    // Saltar cabecera / pie de página
-    if (
-      /^Página \d+\/\d+$/.test(full) ||
-      /^Calumen®/.test(full) ||
-      /^Datos de prestaciones/.test(full) ||
-      /^Tipo de acristalamiento/.test(full)
-    )
-      continue;
-
-    // Cabecera del PDF: Calculado por / fecha / catálogo / normas
-    if (/Calculado por:|Catálogo de producto:|Normas:/.test(full)) {
+  for (const line of headerLines) {
+    const text = textOf(line.items);
+    if (!documentTitle && line.y > 768 && !/^(Calculado|Tipo|Página|Calumen)/i.test(text)) {
+      documentTitle = text;
+    } else if (/^Capa:\s*/i.test(text)) {
+      const m = text.match(/^Capa:\s*(.*?)(?:\s*#(\d+))?$/i);
+      if (m) {
+        coatingMaterial = m[1].trim();
+        if (m[2]) coatingPosition = Number(m[2]);
+      }
+    } else if (/Calculado por:|Catálogo de producto:|Normas:/i.test(text)) {
       if (!meta.calculatedBy) {
-        const m = full.match(
-          /Calculado por:\s*(.+?)(?=\s+Calculado en:|\s+Catálogo de producto:|$)/i,
-        );
+        const m = text.match(/Calculado por:\s*(.+?)(?=\s+Calculado en:|\s+Catálogo de producto:|$)/i);
         if (m) meta.calculatedBy = m[1].trim();
       }
       if (!meta.calculatedAt) {
-        const m = full.match(/Calculado en:\s*([^\s]+)/i);
+        const m = text.match(/Calculado en:\s*([^\s]+)/i);
         if (m) meta.calculatedAt = m[1].trim();
       }
       if (!meta.catalog) {
-        const m = full.match(
-          /Catálogo de producto:\s*(.+?)(?=\s+Normas:|$)/i,
-        );
+        const m = text.match(/Catálogo de producto:\s*(.+?)(?=\s+Normas:|$)/i);
         if (m) meta.catalog = m[1].trim();
       }
       if (!meta.standard) {
-        const m = full.match(/Normas:\s*(.+)$/i);
+        const m = text.match(/Normas:\s*(.+)$/i);
         if (m) meta.standard = m[1].trim();
+      }
+    }
+  }
+
+  // Si no se capturó título en la cabecera alta, buscar el primer texto representativo
+  if (!documentTitle) {
+    const fallbackLine = headerLines.find(
+      (l) => l.y > 700 && !/^(Calculado|Tipo|Página|Calumen)/i.test(textOf(l.items)),
+    );
+    if (fallbackLine) {
+      documentTitle = textOf(fallbackLine.items);
+    }
+  }
+
+  // Nombre de vidrio comercial enriquecido
+  let glassName = documentTitle;
+  if (coatingMaterial && !glassName.toLowerCase().includes(coatingMaterial.toLowerCase())) {
+    glassName = `${documentTitle} - ${coatingMaterial}${coatingPosition ? ` #${coatingPosition}` : ""}`;
+  }
+
+  // 2. COLUMNA IZQUIERDA (x < 270, 60 < y < 735): Composición completa del acristalamiento
+  const leftItems = items.filter((i) => i.x < 270 && i.y > 60 && i.y < 735);
+  const leftLines = clusterByLine(leftItems);
+
+  const rawLeftTexts = leftLines
+    .map((l) => textOf(l.items))
+    .filter(Boolean)
+    .filter((t) => !/^(Tipo de acristalamiento|Página|Calumen)/i.test(t));
+
+  const layers: GlassLayer[] = [];
+  let currentGroup = ""; // "Vidrio 1", "Cámara1", "Vidrio 2", etc.
+
+  for (let idx = 0; idx < rawLeftTexts.length; idx++) {
+    const text = rawLeftTexts[idx];
+
+    // Marcadores de grupo en Calumen (Vidrio 1, Cámara1, etc.)
+    if (/^Vidrio\s*\d*$/i.test(text)) {
+      currentGroup = text;
+      continue;
+    }
+    if (/^C[aá]mara\s*\d*$/i.test(text)) {
+      currentGroup = text;
+      continue;
+    }
+
+    // A) Cámara de aire / gas (Doble o Triple acristalamiento insulado)
+    const isCavityContext = /^C[aá]mara/i.test(currentGroup) || /\b(air|aire|argon|gas)\b/i.test(text);
+    if (isCavityContext) {
+      let mat = "AIR";
+      let thick: string | undefined = undefined;
+      const thMatch = text.match(/(\d+(?:\.\d+)?)\s*mm/i);
+      if (thMatch) {
+        thick = `${thMatch[1]}mm`;
+      }
+      if (/\bargon\b/i.test(text)) mat = "ARGON";
+      else if (/\bkripton\b/i.test(text)) mat = "KRIPTON";
+      else if (/\b(air|aire)\b/i.test(text)) mat = "AIR";
+      else mat = text.replace(/\d+(?:\.\d+)?\s*mm/i, "").trim() || "Cámara de aire";
+
+      layers.push({
+        material: mat,
+        thickness: thick,
+        kind: "air",
+      });
+      continue;
+    }
+
+    // B) Interlámina de seguridad (Laminados)
+    if (/\b(pvb|sentryglas|sentry|eva|trosifol|ionoplast)\b/i.test(text)) {
+      const match = text.match(/^(.*?)(?:\s*\(([^)]*)\))?$/);
+      let mat = text;
+      let thick: string | undefined = undefined;
+      if (match) {
+        mat = match[1].trim();
+        thick = match[2] ? normalizeThickness(match[2]) : undefined;
+      }
+      if (!thick) {
+        const directThick = text.match(/(\d+(?:\.\d+)?)\s*mm/i);
+        if (directThick) {
+          thick = `${directThick[1]}mm`;
+          mat = mat.replace(directThick[0], "").trim();
+        }
+      }
+      layers.push({
+        material: mat,
+        thickness: thick,
+        kind: "interlayer",
+        laminated: true,
+      });
+      continue;
+    }
+
+    // C) Capa de control solar o bajo emisivo (Low-E / Coating)
+    if (
+      /\b(cool.?lite|planitherm|stopray|suncool|coating|low.?e)\b/i.test(text) ||
+      (coatingMaterial && text.toLowerCase().includes(coatingMaterial.toLowerCase()))
+    ) {
+      layers.push({
+        material: text,
+        kind: "coating",
+        position: coatingPosition ?? 2,
+      });
+      continue;
+    }
+
+    // D) Sustrato de vidrio estándar: MATERIAL(ESPESOR) - TRATAMIENTO
+    const substrateMatch = text.match(/^(.*?)(?:\s*\(([^)]*)\))?(?:\s*[-–—]\s*(.+))?$/);
+    if (substrateMatch && substrateMatch[1].trim()) {
+      layers.push({
+        material: substrateMatch[1].trim(),
+        thickness: substrateMatch[2] ? normalizeThickness(substrateMatch[2]) : undefined,
+        treatment: substrateMatch[3] ? substrateMatch[3].trim() : undefined,
+        kind: "substrate",
+      });
+      continue;
+    }
+
+    // E) Capa genérica
+    layers.push({
+      material: text,
+      kind: "substrate",
+    });
+  }
+
+  // 3. COLUMNA DERECHA (x >= 270, 60 < y < 735): Prestaciones técnicas y dimensiones
+  const rightItems = items.filter((i) => i.x >= 270 && i.y > 60 && i.y < 735);
+  const rightLines = clusterByLine(rightItems);
+
+  const sections: PerfSection[] = [];
+  let currentSection: PerfSection | null = null;
+
+  for (let idx = 0; idx < rightLines.length; idx++) {
+    const line = rightLines[idx];
+    const firstItem = line.items[0];
+    const lastItem = line.items[line.items.length - 1];
+    const lineText = textOf(line.items);
+
+    if (/^(Datos de prestaciones|Página)/i.test(lineText)) continue;
+
+    // ¿Es un encabezado canónico de sección?
+    const matchedSectionTitle = CANONICAL_SECTION_TITLES.find(
+      (t) => firstItem.s === t || firstItem.s.startsWith(t + " ") || lineText.startsWith(t),
+    );
+
+    if (matchedSectionTitle) {
+      const key = sectionKey(matchedSectionTitle);
+      const existing = sections.find((s) => s.key === key);
+      if (!existing) {
+        currentSection = {
+          id: makeId("sec"),
+          key,
+          title: SECTION_LABELS[key] ?? matchedSectionTitle,
+          standard: undefined,
+          icon: SECTION_ICONS[key] ?? "icon-luminosos.png",
+          rows: [],
+        };
+        sections.push(currentSection);
+      } else {
+        currentSection = existing;
+      }
+
+      // Extraer norma en la misma cabecera (ej: "Factores Luminosos"  "CIE015:2018")
+      if (line.items.length >= 2 && lastItem !== firstItem) {
+        const stdCandidate = lastItem.s.trim();
+        if (/(CIE|NFRC|EN\s*\d+|ANSI|ISO|ASTM)/i.test(stdCandidate)) {
+          currentSection.standard = stdCandidate;
+        }
       }
       continue;
     }
 
-    // Columna izquierda: capa de vidrio MATERIAL(12mm) - Tratamiento
-    if (leftText && !/^(Vidrio|Calculado por|Página)/i.test(leftText)) {
-      const layerMatch = leftText.match(
-        /^(.*?)(?:\s*\(([^)]*)\))?(?:\s*[-–—]\s*(.+))?$/,
-      );
-      if (
-        layerMatch &&
-        layerMatch[1].trim() &&
-        /^(PLANILUX|PVB|EVA|SGG|Saint|Vidrio|Float|Planibel|Diamant|Stopray|CoolLite)/i.test(
-          layerMatch[1].trim(),
-        )
-      ) {
-        layers.push({
-          material: layerMatch[1].trim(),
-          thickness: layerMatch[2]
-            ? normalizeThickness(layerMatch[2])
-            : undefined,
-          treatment: layerMatch[3] ? layerMatch[3].trim() : undefined,
-        });
-        continue;
-      }
-    }
-
-    // Columna derecha: primer item = etiqueta, último = valor
-    if (rightItems.length >= 2) {
-      const first = textOf(rightItems.slice(0, 1));
-      const last = textOf(rightItems.slice(-1));
-
-      // ¿Es un título de sección?
-      if (isSectionTitle(first)) {
-        const title = first;
-        const key = sectionKey(title);
-        const existing = sections.find((s) => s.key === key);
-        if (!existing) {
-          currentSection = {
-            id: makeId("sec"),
-            key,
-            title: SECTION_LABELS[key] ?? title,
-            standard: undefined,
-            icon: SECTION_ICONS[key] ?? "icon-luminosos.png",
-            rows: [],
-          };
-          sections.push(currentSection);
-        } else {
-          currentSection = existing;
-        }
-        // El estándar puede estar en el último item
-        if (currentSection && !currentSection.standard) {
-          const stdMatch = last.match(
-            /(CIE015:?2018|NFRC|EN\s*\d+|ANSI[^\s]*|ISO\s*\d+[^\s]*)/,
-          );
-          if (stdMatch) currentSection.standard = stdMatch[0];
-        }
-        continue;
-      }
-
-      // Fila de prestación: etiqueta => valor
-      if (first && last && currentSection) {
+    if (currentSection) {
+      // Caso 1: Fila estándar de dos columnas (etiqueta a la izquierda y valor a la derecha)
+      if (line.items.length >= 2) {
+        const label = textOf(line.items.slice(0, -1));
+        const value = lastItem.s.trim();
         currentSection.rows.push({
           id: makeId("row"),
-          label: first.replace(/\s+/g, " ").trim(),
-          value: last.replace(/\s+/g, " ").trim(),
+          label,
+          value,
           kind: "row",
         });
         continue;
       }
-    }
 
-    // Columna derecha: estándar suelto de sección (línea siguiente al título)
-    if (
-      currentSection &&
-      !currentSection.standard &&
-      rightText &&
-      (rightText.includes("CIE015") ||
-        rightText.includes("NFRC") ||
-        rightText.includes("EN ") ||
-        rightText.includes("ANSI") ||
-        rightText.includes("ISO "))
-    ) {
-      currentSection.standard = rightText;
-      continue;
+      // Caso 2: Elemento suelto en la línea
+      const item = line.items[0];
+
+      // A) Norma en línea siguiente a la cabecera
+      if (
+        !currentSection.standard &&
+        currentSection.rows.length === 0 &&
+        /(CIE|NFRC|EN\s*\d+|ANSI|ISO|ASTM)/i.test(item.s)
+      ) {
+        currentSection.standard = item.s.trim();
+        continue;
+      }
+
+      // B) Valor a la derecha (x >= 440) que completa una fila o nota previa
+      if (item.x >= 440 && currentSection.rows.length > 0) {
+        const lastRow = currentSection.rows[currentSection.rows.length - 1];
+        if (lastRow.kind === "note" || !lastRow.value) {
+          lastRow.kind = "row";
+          lastRow.value = item.s.trim();
+          continue;
+        }
+      }
+
+      // C) Etiqueta multilínea (ej: "Resistencia a Impacto de Cuerpo" seguida de "Pendular")
+      if (
+        currentSection.rows.length > 0 &&
+        currentSection.rows[currentSection.rows.length - 1].kind === "note" &&
+        !currentSection.rows[currentSection.rows.length - 1].value
+      ) {
+        const prevRow = currentSection.rows[currentSection.rows.length - 1];
+        if (idx + 1 < rightLines.length && rightLines[idx + 1].items[0].x >= 440) {
+          prevRow.label = `${prevRow.label} ${item.s.trim()}`;
+          continue;
+        }
+      }
+
+      // D) Continuación de etiqueta en caso de impacto de cuerpo pendular
+      if (
+        currentSection.rows.length > 0 &&
+        item.x < 440 &&
+        currentSection.rows[currentSection.rows.length - 1].kind === "row" &&
+        /Resistencia a Impacto de Cuerpo$/i.test(currentSection.rows[currentSection.rows.length - 1].label)
+      ) {
+        currentSection.rows[currentSection.rows.length - 1].label += ` ${item.s.trim()}`;
+        continue;
+      }
+
+      // E) Nota informativa
+      currentSection.rows.push({
+        id: makeId("row"),
+        label: item.s.trim(),
+        kind: "note",
+      });
     }
   }
 
@@ -269,10 +384,17 @@ export function parseCalumenPdfText(
     warnings.push("No se detectó la composición del vidrio en el PDF.");
   }
 
+  const rawText = items
+    .map((i) => i.s)
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 30000);
+
   return {
     sections: ordered,
     layers,
     warnings,
+    glassName,
     documentTitle,
     rawText,
   };

@@ -586,11 +586,19 @@ export default function SpecWorkbench({
         setSections(data.sections);
       }
       if (data.layers && data.layers.length > 0) {
-        const merged = mergeParsedLayers(layers, data.layers);
-        setLayers(merged);
+        setLayers(data.layers);
       }
-      if (data.glassName && !glassName.trim()) {
+      if (data.glassName) {
         setGlassName(data.glassName);
+      }
+      if (data.meta?.calculatedBy && !calculatedBy.trim()) {
+        setCalculatedBy(data.meta.calculatedBy);
+      }
+      if (data.meta?.standard && !standard.trim()) {
+        setStandard(data.meta.standard);
+      }
+      if (data.meta?.catalog && !catalog.trim()) {
+        setCatalog(data.meta.catalog);
       }
       if (data.warnings && data.warnings.length > 0) {
         setWarnings(data.warnings);

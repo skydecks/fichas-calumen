@@ -3,6 +3,8 @@ import { getDocumentProxy } from "unpdf";
 import { resolveAiConfig, AiConfigError } from "@/lib/ai-config";
 import { ProductExtractionError, extractProductProfile } from "@/lib/ai-product";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { parseCalumenPdfText } from "@/lib/pdf-parser";
+import type { ProductProfile } from "@/lib/products";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,25 +58,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
     }
 
-    let ai: ReturnType<typeof resolveAiConfig>;
+    let ai: ReturnType<typeof resolveAiConfig> | null = null;
     try {
       ai = resolveAiConfig(aiOverride);
-    } catch (error) {
-      if (error instanceof AiConfigError) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: error.status },
-        );
-      }
-      return NextResponse.json(
-        { error: "No se pudo preparar el proveedor de IA." },
-        { status: 400 },
-      );
+    } catch {
+      // Continuar; si es un PDF de Calumen se extraerá determinísticamente
     }
 
     const name = file.name.toLowerCase();
-    const isPdf =
-      file.type === "application/pdf" || name.endsWith(".pdf");
+    const isPdf = file.type === "application/pdf" || name.endsWith(".pdf");
     const isImage = ["image/png", "image/jpeg", "image/webp"].includes(
       file.type,
     );
@@ -82,6 +74,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     let rawText = "";
     let imageDataUrl: string | undefined;
     let sourceType = "pdf";
+    let calumenProfile: ProductProfile | null = null;
 
     if (isPdf) {
       if (file.size > MAX_PDF_BYTES) {
@@ -101,6 +94,73 @@ export async function POST(request: Request): Promise<NextResponse> {
           { status: 400 },
         );
       }
+
+      // Pre-extracción determinística si el PDF proviene de Calumen
+      if (rawText.includes("Calumen") || rawText.includes("Tipo de acristalamiento")) {
+        try {
+          const pdfProxy = await getDocumentProxy(bytes);
+          const page1 = await pdfProxy.getPage(1);
+          const textContent = await page1.getTextContent();
+          const items: { s: string; x: number; y: number; w: number }[] = [];
+          for (const raw of textContent.items) {
+            if ("str" in raw && typeof raw.str === "string" && raw.str.trim()) {
+              const t = raw.transform;
+              items.push({
+                s: raw.str,
+                x: Math.round(t[4] * 10) / 10,
+                y: Math.round(t[5] * 10) / 10,
+                w: Math.round(raw.width * 10) / 10,
+              });
+            }
+          }
+          const calumenResult = parseCalumenPdfText(items, {});
+          if (calumenResult.layers.length > 0) {
+            const isInsulated = calumenResult.layers.some(
+              (l) => l.kind === "air" || l.kind === "cavity",
+            );
+            const isLaminated = calumenResult.layers.some(
+              (l) => l.kind === "interlayer" || l.laminated,
+            );
+            const hasCoating = calumenResult.layers.some((l) => l.kind === "coating");
+            const category = isInsulated
+              ? "Doble acristalamiento"
+              : isLaminated
+                ? "Seguridad"
+                : hasCoating
+                  ? "Control solar"
+                  : "Vidrio flotado";
+
+            const keyValues: Record<string, string> = {};
+            for (const s of calumenResult.sections) {
+              for (const r of s.rows) {
+                if (r.kind === "row" && r.value) {
+                  keyValues[r.label] = r.value;
+                }
+              }
+            }
+
+            calumenProfile = {
+              name:
+                calumenResult.glassName ||
+                calumenResult.documentTitle ||
+                file.name.replace(/\.pdf$/i, ""),
+              code: calumenResult.documentTitle || "",
+              category,
+              manufacturer: "Saint-Gobain",
+              description: `Acristalamiento ${calumenResult.glassName || calumenResult.documentTitle} analizado en Calumen.`,
+              summary: `Composición: ${calumenResult.layers
+                .map((l) => `${l.material}${l.thickness ? ` (${l.thickness})` : ""}`)
+                .join(" + ")}`,
+              layers: calumenResult.layers,
+              sections: calumenResult.sections,
+              keyValues,
+              colors: {},
+            };
+          }
+        } catch (err) {
+          console.warn("Fallo en pre-extracción de Calumen:", err);
+        }
+      }
     } else if (isImage) {
       if (file.size > MAX_IMAGE_BYTES) {
         return NextResponse.json(
@@ -118,10 +178,39 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
-    const profile = await extractProductProfile(
-      { fileName: file.name, rawText, imageDataUrl },
-      ai,
-    );
+    let profile: ProductProfile;
+    if (ai) {
+      try {
+        profile = await extractProductProfile(
+          { fileName: file.name, rawText, imageDataUrl },
+          ai,
+        );
+        // Si la IA omitió las capas pero el parser nativo de Calumen detectó la composición insulada:
+        if (
+          calumenProfile &&
+          calumenProfile.layers.length > profile.layers.length &&
+          calumenProfile.layers.some((l) => l.kind === "air" || l.kind === "cavity")
+        ) {
+          profile.layers = calumenProfile.layers;
+          if (!profile.name || profile.name === "Producto sin nombre") {
+            profile.name = calumenProfile.name;
+          }
+        }
+      } catch (error) {
+        if (calumenProfile) {
+          profile = calumenProfile;
+        } else {
+          throw error;
+        }
+      }
+    } else if (calumenProfile) {
+      profile = calumenProfile;
+    } else {
+      return NextResponse.json(
+        { error: "No hay un proveedor de IA configurado para procesar esta ficha." },
+        { status: 400 },
+      );
+    }
 
     return NextResponse.json({
       ok: true,
