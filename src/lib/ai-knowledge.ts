@@ -15,15 +15,11 @@ const KNOWLEDGE_DIR = path.join(process.cwd(), "public", "knowledge");
 const MAX_KNOWLEDGE_CHARS = 28_000;
 const DEFAULT_DOC = "NOM-146-SCFI-2016.md";
 
-export type KnowledgeDocMeta = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  file: string;
-  size: number;
-  updatedAt: string;
-  isDefault: boolean;
-};
+export * from "./knowledge-types";
+import {
+  type KnowledgeCategory,
+  type KnowledgeDocMeta,
+} from "./knowledge-types";
 
 type KnowledgeSection = {
   sourceFile: string;
@@ -48,9 +44,9 @@ export function sanitizeFileName(rawName: string): string {
     .replace(/\.md$/i, "")
     .trim()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // remover tildes
-    .replace(/[^a-zA-Z0-9_\-.]+/g, "-") // caracteres no permitidos a guiones
-    .replace(/^-+|-+$/g, ""); // recortar guiones en extremos
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_\-.]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
   const clean = base || "nuevo-articulo";
   return clean.endsWith(".md") ? clean : `${clean}.md`;
@@ -70,13 +66,99 @@ export function fileToSlug(fileName: string): string {
 }
 
 /**
+ * Extrae y parsea el frontmatter YAML y el cuerpo Markdown.
+ */
+export function parseFrontmatter(rawContent: string): {
+  metadata: {
+    category?: KnowledgeCategory;
+    families?: string[];
+    standards?: string[];
+  };
+  body: string;
+} {
+  const match = rawContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  if (!match) {
+    return { metadata: {}, body: rawContent };
+  }
+
+  const yamlBlock = match[1];
+  const body = match[2];
+  const metadata: {
+    category?: KnowledgeCategory;
+    families?: string[];
+    standards?: string[];
+  } = {};
+
+  for (const line of yamlBlock.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const colonIndex = trimmed.indexOf(":");
+    if (colonIndex === -1) continue;
+
+    const key = trimmed.slice(0, colonIndex).trim().toLowerCase();
+    const value = trimmed.slice(colonIndex + 1).trim();
+
+    if (key === "categoria" || key === "category") {
+      const cleanVal = value.replace(/['"]/g, "").trim();
+      if (
+        cleanVal === "Norma Oficial" ||
+        cleanVal === "Guía de Producto" ||
+        cleanVal === "Criterio de Instalación" ||
+        cleanVal === "Procedimiento Interno"
+      ) {
+        metadata.category = cleanVal as KnowledgeCategory;
+      }
+    } else if (key === "familias" || key === "families") {
+      const cleanList = value
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((s) => s.replace(/['"]/g, "").trim())
+        .filter(Boolean);
+      metadata.families = cleanList;
+    } else if (key === "normas" || key === "standards") {
+      const cleanList = value
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((s) => s.replace(/['"]/g, "").trim())
+        .filter(Boolean);
+      metadata.standards = cleanList;
+    }
+  }
+
+  return { metadata, body };
+}
+
+/**
+ * Serializa los metadatos como encabezado YAML frontmatter antes del cuerpo Markdown.
+ */
+export function serializeFrontmatter(
+  meta: {
+    category?: KnowledgeCategory;
+    families?: string[];
+    standards?: string[];
+  },
+  body: string,
+): string {
+  const parts: string[] = ["---"];
+  if (meta.category) parts.push(`categoria: ${meta.category}`);
+  if (meta.families && meta.families.length > 0) {
+    parts.push(`familias: [${meta.families.join(", ")}]`);
+  }
+  if (meta.standards && meta.standards.length > 0) {
+    parts.push(`normas: [${meta.standards.join(", ")}]`);
+  }
+  parts.push("---");
+  return `${parts.join("\n")}\n\n${body.trim()}`;
+}
+
+/**
  * Resuelve la ruta física validando que permanezca estrictamente dentro de KNOWLEDGE_DIR.
  */
 function resolveSafePath(fileNameOrId: string): { fullPath: string; fileName: string } | null {
   ensureDir();
   const cleanInput = path.basename(fileNameOrId.trim());
 
-  // Intento 1: coincidencia exacta con el archivo
   let targetName = cleanInput.endsWith(".md") ? cleanInput : `${cleanInput}.md`;
   let fullPath = path.resolve(KNOWLEDGE_DIR, targetName);
 
@@ -84,7 +166,6 @@ function resolveSafePath(fileNameOrId: string): { fullPath: string; fileName: st
     return { fullPath, fileName: targetName };
   }
 
-  // Intento 2: búsqueda por slug/id insensible a mayúsculas
   try {
     const files = readdirSync(KNOWLEDGE_DIR);
     const targetSlug = fileToSlug(cleanInput);
@@ -104,20 +185,20 @@ function resolveSafePath(fileNameOrId: string): { fullPath: string; fileName: st
       }
     }
   } catch {
-    // ignorar error de lectura de directorio
+    // ignorar
   }
 
   return null;
 }
 
 /**
- * Extrae título y subtítulo iniciales a partir del contenido Markdown.
+ * Extrae título y subtítulo iniciales a partir del cuerpo Markdown.
  */
-function extractDocHeaders(content: string, fallbackFileName: string): {
+function extractDocHeaders(body: string, fallbackFileName: string): {
   title: string;
   subtitle?: string;
 } {
-  const lines = content.split("\n");
+  const lines = body.split("\n");
   let title = "";
   let subtitle = "";
 
@@ -152,7 +233,84 @@ function extractDocHeaders(content: string, fallbackFileName: string): {
 }
 
 /**
+ * Deducción inteligente de categoría y familias si no existen en el frontmatter.
+ */
+function deduceDocMetadata(
+  fileName: string,
+  title: string,
+  body: string,
+  explicitMeta: {
+    category?: KnowledgeCategory;
+    families?: string[];
+    standards?: string[];
+  },
+): {
+  category: KnowledgeCategory;
+  families: string[];
+  standards: string[];
+} {
+  let category = explicitMeta.category;
+  if (!category) {
+    if (
+      fileName.toLowerCase().includes("nom") ||
+      fileName.toLowerCase().includes("norma") ||
+      /nom-\d+|en\s*\d+|astm\s*[a-z]\d+|nfrc/i.test(title)
+    ) {
+      category = "Norma Oficial";
+    } else if (
+      /instalacion|montaje|calzos|sellador|drenaje/i.test(title) ||
+      /instalacion/i.test(fileName)
+    ) {
+      category = "Criterio de Instalación";
+    } else if (
+      /procedimiento|criterio|validacion|emision/i.test(title)
+    ) {
+      category = "Procedimiento Interno";
+    } else {
+      category = "Guía de Producto";
+    }
+  }
+
+  let families = explicitMeta.families ? [...explicitMeta.families] : [];
+  if (families.length === 0) {
+    const textToScan = `${fileName} ${title} ${body.slice(0, 2000)}`.toLowerCase();
+    if (textToScan.includes("templado") || textToScan.includes("esg") || textToScan.includes("impacto")) {
+      families.push("Vidrio Templado");
+    }
+    if (textToScan.includes("laminado") || textToScan.includes("pvb") || textToScan.includes("vsg") || textToScan.includes("sentryglas")) {
+      families.push("Vidrio Laminado");
+    }
+    if (textToScan.includes("doble acristalamiento") || textToScan.includes("dgu") || textToScan.includes("camara") || textToScan.includes("aislante")) {
+      families.push("Doble Acristalamiento (DGU)");
+    }
+    if (textToScan.includes("solar") || textToScan.includes("low-e") || textToScan.includes("baja emisividad") || textToScan.includes("capa")) {
+      families.push("Control Solar y Low-E");
+    }
+    if (textToScan.includes("acustic") || textToScan.includes("rw") || textToScan.includes("db") || textToScan.includes("ruido")) {
+      families.push("Aislamiento Acústico");
+    }
+    if (textToScan.includes("seguridad") || textToScan.includes("contencion") || textToScan.includes("barandal") || textToScan.includes("balas")) {
+      families.push("Vidrio de Seguridad y Contención");
+    }
+  }
+
+  let standards = explicitMeta.standards ? [...explicitMeta.standards] : [];
+  if (standards.length === 0) {
+    const textToScan = `${title} ${body.slice(0, 3000)}`;
+    const foundStandards = textToScan.match(
+      /(?:NOM-\d{3}-[A-Z0-9/]+-\d{4}|EN\s*\d{3,5}|ISO\s*\d{4,5}|NFRC\s*\d{3}|ASTM\s*[A-Z]\d{3,4})/gi,
+    );
+    if (foundStandards) {
+      standards = Array.from(new Set(foundStandards.map((s) => s.trim()))).slice(0, 5);
+    }
+  }
+
+  return { category, families, standards };
+}
+
+/**
  * Lee un documento de conocimiento por nombre de archivo o ID.
+ * Devuelve el contenido completo (o solo el cuerpo si se solicita).
  */
 export function getKnowledgeDocument(fileNameOrId = DEFAULT_DOC): string {
   ensureDir();
@@ -187,13 +345,18 @@ export function getKnowledgeDocMeta(fileNameOrId: string): KnowledgeDocMeta | nu
 
   try {
     const stat = statSync(resolved.fullPath);
-    const content = getKnowledgeDocument(resolved.fileName);
-    const headers = extractDocHeaders(content, resolved.fileName);
+    const rawContent = getKnowledgeDocument(resolved.fileName);
+    const { metadata: fmMeta, body } = parseFrontmatter(rawContent);
+    const headers = extractDocHeaders(body, resolved.fileName);
+    const deduced = deduceDocMetadata(resolved.fileName, headers.title, body, fmMeta);
 
     return {
       id: fileToSlug(resolved.fileName),
       title: headers.title,
       subtitle: headers.subtitle,
+      category: deduced.category,
+      families: deduced.families,
+      standards: deduced.standards,
       file: resolved.fileName,
       size: stat.size,
       updatedAt: stat.mtime.toISOString(),
@@ -212,21 +375,25 @@ export function listKnowledgeDocuments(): KnowledgeDocMeta[] {
 
   try {
     const files = readdirSync(KNOWLEDGE_DIR).filter((f) => f.endsWith(".md"));
-
     const list: KnowledgeDocMeta[] = [];
 
     for (const file of files) {
       const fullPath = path.join(KNOWLEDGE_DIR, file);
       try {
         const stat = statSync(fullPath);
-        const content = readFileSync(fullPath, "utf8");
-        const headers = extractDocHeaders(content, file);
+        const rawContent = readFileSync(fullPath, "utf8");
+        const { metadata: fmMeta, body } = parseFrontmatter(rawContent);
+        const headers = extractDocHeaders(body, file);
+        const deduced = deduceDocMetadata(file, headers.title, body, fmMeta);
         const isDefault = file.toLowerCase() === DEFAULT_DOC.toLowerCase();
 
         list.push({
           id: fileToSlug(file),
           title: headers.title,
           subtitle: headers.subtitle,
+          category: deduced.category,
+          families: deduced.families,
+          standards: deduced.standards,
           file,
           size: stat.size,
           updatedAt: stat.mtime.toISOString(),
@@ -237,7 +404,6 @@ export function listKnowledgeDocuments(): KnowledgeDocMeta[] {
       }
     }
 
-    // Ordenar: el documento oficial NOM-146 primero, luego orden alfabético o más recientes
     list.sort((a, b) => {
       if (a.isDefault) return -1;
       if (b.isDefault) return 1;
@@ -251,6 +417,9 @@ export function listKnowledgeDocuments(): KnowledgeDocMeta[] {
       {
         id: "nom-146-scfi-2016",
         title: "NOM-146-SCFI-2016 — Vidrio de seguridad",
+        category: "Norma Oficial",
+        families: ["Vidrio Templado", "Vidrio Laminado"],
+        standards: ["NOM-146-SCFI-2016"],
         file: DEFAULT_DOC,
         size: 0,
         updatedAt: new Date().toISOString(),
@@ -261,12 +430,15 @@ export function listKnowledgeDocuments(): KnowledgeDocMeta[] {
 }
 
 /**
- * Guarda o crea un nuevo artículo de conocimiento en formato .md.
+ * Guarda o crea un nuevo artículo de conocimiento en formato .md preservando metadatos.
  */
 export function saveKnowledgeDocument(params: {
   fileName?: string;
   title: string;
   subtitle?: string;
+  category?: KnowledgeCategory;
+  families?: string[];
+  standards?: string[];
   content: string;
 }): { id: string; fileName: string; title: string } {
   ensureDir();
@@ -283,17 +455,25 @@ export function saveKnowledgeDocument(params: {
     throw new Error("Ruta de archivo no autorizada.");
   }
 
-  let finalContent = params.content.trim();
+  // Parsear si el usuario ya escribió o no frontmatter
+  const { metadata: existingFm, body: rawBody } = parseFrontmatter(params.content);
+  let finalBody = rawBody.trim();
 
-  // Si el contenido no tiene encabezado H1 y tenemos título, anteponerlo amistosamente
-  if (!/^#\s+/m.test(finalContent) && params.title) {
+  // Asegurar encabezado H1 si no lo tiene
+  if (!/^#\s+/m.test(finalBody) && params.title) {
     const subtitlePart = params.subtitle ? `\n\n> ${params.subtitle}` : "";
-    finalContent = `# ${params.title}${subtitlePart}\n\n${finalContent}`;
+    finalBody = `# ${params.title}${subtitlePart}\n\n${finalBody}`;
   }
 
-  writeFileSync(fullPath, finalContent, "utf8");
+  const finalMetadata = {
+    category: params.category || existingFm.category || "Guía de Producto",
+    families: params.families && params.families.length > 0 ? params.families : existingFm.families || [],
+    standards: params.standards && params.standards.length > 0 ? params.standards : existingFm.standards || [],
+  };
 
-  // Invalidar caché
+  const filePayload = serializeFrontmatter(finalMetadata, finalBody);
+
+  writeFileSync(fullPath, filePayload, "utf8");
   documentCache.delete(targetFileName);
 
   return {
@@ -311,7 +491,6 @@ export function deleteKnowledgeDocument(fileNameOrId: string): boolean {
   const resolved = resolveSafePath(fileNameOrId);
   if (!resolved) return false;
 
-  // Proteger la norma base obligatoria de borrado accidental
   if (resolved.fileName.toLowerCase() === DEFAULT_DOC.toLowerCase()) {
     throw new Error("El documento normativo base (NOM-146-SCFI-2016) no puede ser eliminado.");
   }
@@ -319,6 +498,40 @@ export function deleteKnowledgeDocument(fileNameOrId: string): boolean {
   unlinkSync(resolved.fullPath);
   documentCache.delete(resolved.fileName);
   return true;
+}
+
+/**
+ * Busca de forma reactiva y sugerida los artículos aplicables a una composición de vidrio.
+ */
+export function findKnowledgeForComposition(
+  layers: Array<{ material?: string; treatment?: string; thickness?: string }>,
+): KnowledgeDocMeta[] {
+  const docs = listKnowledgeDocuments();
+  if (docs.length === 0) return [];
+
+  const layerTexts = layers
+    .map((l) => `${l.material ?? ""} ${l.treatment ?? ""} ${l.thickness ?? ""}`.toLowerCase())
+    .join(" ");
+
+  const hasLaminated = /lamin|pvb|vsg|sentry|acustic/i.test(layerTexts);
+  const hasTempered = /templ|esg|thermo|endurecid/i.test(layerTexts);
+  const hasDgu = layers.some((l) => /camara|gas|aire|argon|intercal/i.test(l.material ?? ""));
+  const hasLowE = /low-e|capa|solar|control|baja emisiv/i.test(layerTexts);
+
+  const matched = docs.filter((doc) => {
+    if (doc.isDefault) return true; // NOM-146 siempre es relevante en México
+    const docTags = doc.families.join(" ").toLowerCase();
+    const docTitle = doc.title.toLowerCase();
+
+    if (hasLaminated && (docTags.includes("laminado") || docTitle.includes("laminado") || docTags.includes("seguridad"))) return true;
+    if (hasTempered && (docTags.includes("templado") || docTitle.includes("templado") || docTags.includes("seguridad"))) return true;
+    if (hasDgu && (docTags.includes("dgu") || docTags.includes("doble acristalamiento") || docTitle.includes("camara"))) return true;
+    if (hasLowE && (docTags.includes("solar") || docTags.includes("low-e") || docTitle.includes("termic"))) return true;
+
+    return false;
+  });
+
+  return matched.slice(0, 4);
 }
 
 function normalize(value: string): string {
@@ -427,10 +640,13 @@ export function buildAiKnowledge(query: string): string {
 
   for (const doc of allDocs) {
     try {
-      const content = getKnowledgeDocument(doc.file);
-      const sections = splitSections(content, doc.file);
+      const rawContent = getKnowledgeDocument(doc.file);
+      const { body } = parseFrontmatter(rawContent);
+      const sections = splitSections(body, doc.file);
       allSections.push(...sections);
-      docCatalogLines.push(`- ${doc.title} (Archivo: ${doc.file})`);
+      docCatalogLines.push(
+        `- [${doc.title}](/conocimiento/${doc.id}) — Categoría: ${doc.category} — Archivo: ${doc.file}`,
+      );
     } catch {
       // Ignorar fallo de un archivo individual
     }
@@ -446,7 +662,6 @@ export function buildAiKnowledge(query: string): string {
     selected.push(section);
   };
 
-  // 1. Siempre incluir ficha normativa o resumen clave de la norma base si existe
   const nomBase = allSections.find(
     (s) => s.sourceFile.toLowerCase() === DEFAULT_DOC.toLowerCase() && /Ficha normativa/i.test(s.title),
   );
@@ -476,17 +691,19 @@ export function buildAiKnowledge(query: string): string {
   const selectedText = selected
     .map(
       (section) =>
-        `### [${section.sourceFile}] ${section.title}\n\n${section.body}`,
+        `### [${section.sourceFile}] ${section.title}\n(Citar como enlace: [/conocimiento/${fileToSlug(section.sourceFile)}])\n\n${section.body}`,
     )
     .join("\n\n");
 
   return [
-    "BASE DE CONOCIMIENTO TÉCNICO Y NORMATIVO CEYCO (.MD):",
+    "BASE DE CONOCIMIENTO TÉCNICO Y NORMATIVO (.MD):",
     "Índice de documentos disponibles en el sistema:",
     docCatalogLines.join("\n"),
     "",
     "SECCIONES RELEVANTES RECUPERADAS PARA ESTA CONSULTA:",
     selectedText || "No se encontraron secciones específicas para los términos indicados.",
+    "",
+    "INSTRUCCIÓN OBLIGATORIA DE CITAS: Cuando menciones o te fundamentes en uno de estos documentos o normas, debes incluir siempre un enlace en formato Markdown [Título del Documento o Norma](/conocimiento/[id-slug]) para que el usuario pueda hacer clic y abrir el artículo de conocimiento en Calumen.",
   ]
     .join("\n")
     .slice(0, MAX_KNOWLEDGE_CHARS);

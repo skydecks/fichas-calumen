@@ -3,6 +3,7 @@ import {
   BookOpen,
   Calendar,
   CheckCircle2,
+  Download,
   Edit,
   ExternalLink,
   FileCode,
@@ -15,8 +16,11 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  GLASS_FAMILIES,
+  KNOWLEDGE_CATEGORIES,
   getKnowledgeDocument,
   listKnowledgeDocuments,
+  parseFrontmatter,
 } from "@/lib/ai-knowledge";
 import { AiMarkdown } from "@/lib/ai-markdown";
 import { PageHeader, EmptyState } from "@/components/ui";
@@ -25,37 +29,57 @@ import { SpectrumCard } from "@/components/spectrum/card";
 import { ConfirmButton } from "@/components/SubmitButton";
 import { deleteKnowledgeArticleAction } from "@/app/actions";
 import { formatDate } from "@/lib/utils";
+import { KnowledgeUploadButton } from "@/components/KnowledgeUploadButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function KnowledgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; doc?: string; eliminado?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    cat?: string;
+    fam?: string;
+    doc?: string;
+    eliminado?: string;
+  }>;
 }) {
-  const { q, doc, eliminado } = await searchParams;
+  const { q, cat, fam, doc, eliminado } = await searchParams;
   const allDocs = listKnowledgeDocuments();
+
   const query = (q ?? "").trim().toLowerCase();
+  const selectedCat = cat ? cat.trim() : "";
+  const selectedFam = fam ? fam.trim() : "";
 
-  const filteredDocs = query
-    ? allDocs.filter(
-        (d) =>
-          d.title.toLowerCase().includes(query) ||
-          d.file.toLowerCase().includes(query) ||
-          (d.subtitle && d.subtitle.toLowerCase().includes(query)),
-      )
-    : allDocs;
+  // Filtro Híbrido: texto, categoría y familia de vidrio
+  const filteredDocs = allDocs.filter((d) => {
+    if (selectedCat && d.category !== selectedCat) return false;
+    if (selectedFam && !d.families.includes(selectedFam)) return false;
 
-  // Documento activo para lectura rápida en la parte inferior
-  const activeDocId = doc ? doc.trim() : (allDocs[0]?.file ?? "");
+    if (!query) return true;
+
+    const inTitle = d.title.toLowerCase().includes(query);
+    const inSubtitle = d.subtitle?.toLowerCase().includes(query) ?? false;
+    const inFile = d.file.toLowerCase().includes(query);
+    const inFamilies = d.families.some((f) => f.toLowerCase().includes(query));
+    const inStandards = d.standards.some((s) => s.toLowerCase().includes(query));
+
+    return inTitle || inSubtitle || inFile || inFamilies || inStandards;
+  });
+
+  // Documento activo para lectura rápida (solo desktop)
+  const activeDocId = doc ? doc.trim() : (filteredDocs[0]?.file ?? allDocs[0]?.file ?? "");
   let activeContent = "";
-  let activeMeta = allDocs.find(
-    (d) => d.file === activeDocId || d.id === activeDocId,
-  ) ?? allDocs[0];
+  let activeMeta =
+    allDocs.find((d) => d.file === activeDocId || d.id === activeDocId) ??
+    filteredDocs[0] ??
+    allDocs[0];
 
   if (activeMeta) {
     try {
-      activeContent = getKnowledgeDocument(activeMeta.file);
+      const raw = getKnowledgeDocument(activeMeta.file);
+      const parsed = parseFrontmatter(raw);
+      activeContent = parsed.body;
     } catch {
       activeContent = "# No se pudo cargar el documento seleccionado.";
     }
@@ -66,7 +90,7 @@ export default async function KnowledgePage({
   ).toFixed(1);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
       {/* Alerta de notificación */}
       {eliminado ? (
         <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">
@@ -78,21 +102,24 @@ export default async function KnowledgePage({
       {/* Encabezado principal */}
       <PageHeader
         eyebrow="Base de conocimiento"
-        title="Artículos Técnicos y Normas (.md)"
-        subtitle="Repositorio central de documentos normativos, especificaciones y guías en Markdown. Indexados automáticamente en el Asistente IA de CEYCO."
+        title="Artículos Técnicos y Normas"
+        subtitle="Repositorio central de documentos normativos, especificaciones y manuales en Markdown."
         actions={
-          <SpectrumButton
-            href="/conocimiento/nuevo"
-            variant="primary"
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            Nuevo artículo (.md)
-          </SpectrumButton>
+          <div className="flex items-center gap-2">
+            <KnowledgeUploadButton className="btn-secondary text-xs sm:text-sm" />
+            <SpectrumButton
+              href="/conocimiento/nuevo"
+              variant="primary"
+              leftIcon={<Plus className="h-4 w-4" />}
+            >
+              Nuevo artículo
+            </SpectrumButton>
+          </div>
         }
       />
 
-      {/* Tarjetas de estadísticas */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Tarjetas de estadísticas (Ocultas en móvil para máxima limpieza) */}
+      <div className="hidden sm:grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SpectrumCard padding="sm" className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
             <BookOpen className="h-5 w-5" />
@@ -144,46 +171,112 @@ export default async function KnowledgePage({
               Índice IA
             </p>
             <p className="text-xs font-semibold text-purple-700">
-              Sincronizado al 100%
+              Sincronizado
             </p>
           </div>
         </SpectrumCard>
       </div>
 
-      {/* Buscador */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-        <form method="GET" action="/conocimiento" className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            name="q"
-            defaultValue={q ?? ""}
-            placeholder="Buscar por título, norma o archivo .md..."
-            className="input pl-9 text-xs"
-          />
-        </form>
-        {query ? (
-          <Link
-            href="/conocimiento"
-            className="text-xs text-brand-600 hover:text-brand-800 self-center"
-          >
-            Limpiar búsqueda
-          </Link>
-        ) : null}
+      {/* Barra de Filtros y Buscador */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Categorías (Scroll horizontal limpio en móvil) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar -mx-1 px-1 sm:mx-0 sm:px-0">
+            <Link
+              href={`/conocimiento${query ? `?q=${encodeURIComponent(query)}` : ""}`}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                !selectedCat
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              Todas ({allDocs.length})
+            </Link>
+            {KNOWLEDGE_CATEGORIES.map((category) => {
+              const active = selectedCat === category;
+              const count = allDocs.filter((d) => d.category === category).length;
+              return (
+                <Link
+                  key={category}
+                  href={`/conocimiento?cat=${encodeURIComponent(category)}${
+                    query ? `&q=${encodeURIComponent(query)}` : ""
+                  }`}
+                  className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    active
+                      ? "bg-brand-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {category} ({count})
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Formulario Buscador */}
+          <form method="GET" action="/conocimiento" className="relative w-full sm:max-w-xs">
+            {selectedCat ? <input type="hidden" name="cat" value={selectedCat} /> : null}
+            {selectedFam ? <input type="hidden" name="fam" value={selectedFam} /> : null}
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              name="q"
+              defaultValue={q ?? ""}
+              placeholder="Buscar normas o temas..."
+              className="input pl-9 text-xs w-full"
+            />
+          </form>
+        </div>
+
+        {/* Filtros por Familia de Vidrio (Solo en escritorio para mantener el móvil minimalista) */}
+        <div className="hidden sm:flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5">
+          <span className="text-[11px] font-semibold text-slate-400 mr-1">
+            Familias:
+          </span>
+          {GLASS_FAMILIES.map((family) => {
+            const active = selectedFam === family;
+            return (
+              <Link
+                key={family}
+                href={`/conocimiento?${selectedCat ? `cat=${encodeURIComponent(selectedCat)}&` : ""}${
+                  active ? "" : `fam=${encodeURIComponent(family)}`
+                }${query ? `&q=${encodeURIComponent(query)}` : ""}`}
+                className={`rounded-full px-2.5 py-0.5 text-[11px] transition ${
+                  active
+                    ? "bg-brand-100 text-brand-800 font-semibold"
+                    : "bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200"
+                }`}
+              >
+                {family}
+              </Link>
+            );
+          })}
+          {(selectedCat || selectedFam || query) && (
+            <Link
+              href="/conocimiento"
+              className="text-[11px] text-brand-600 hover:text-brand-800 ml-auto"
+            >
+              Restablecer
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Grid de Artículos */}
       {filteredDocs.length === 0 ? (
         <EmptyState
           title="No se encontraron artículos"
-          description={`No hay ningún documento que coincida con "${query}".`}
+          description={`No hay ningún documento que coincida con los filtros seleccionados.`}
           action={
-            <SpectrumButton href="/conocimiento/nuevo" variant="primary">
-              Crear artículo nuevo
-            </SpectrumButton>
+            <div className="flex items-center gap-2">
+              <KnowledgeUploadButton className="btn-secondary" />
+              <SpectrumButton href="/conocimiento/nuevo" variant="primary">
+                Crear artículo (.md)
+              </SpectrumButton>
+            </div>
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredDocs.map((docItem) => {
             const isSelected = activeMeta?.file === docItem.file;
             const sizeKb = (docItem.size / 1024).toFixed(1);
@@ -191,7 +284,7 @@ export default async function KnowledgePage({
             return (
               <div
                 key={docItem.file}
-                className={`relative flex flex-col justify-between rounded-xl border bg-white p-5 transition shadow-xs hover:shadow-md ${
+                className={`relative flex flex-col justify-between rounded-xl border bg-white p-4 sm:p-5 transition shadow-xs hover:shadow-md ${
                   isSelected
                     ? "border-brand-500 ring-2 ring-brand-100"
                     : "border-slate-200 hover:border-slate-300"
@@ -199,17 +292,14 @@ export default async function KnowledgePage({
               >
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    {docItem.isDefault ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                      {docItem.isDefault ? (
                         <ShieldCheck className="h-3 w-3" />
-                        Norma Oficial
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                      ) : (
                         <FileCode className="h-3 w-3 text-slate-500" />
-                        Artículo .md
-                      </span>
-                    )}
+                      )}
+                      {docItem.category}
+                    </span>
 
                     <span className="text-[11px] font-mono text-slate-400">
                       {sizeKb} KB
@@ -226,21 +316,32 @@ export default async function KnowledgePage({
                   </h3>
 
                   {docItem.subtitle ? (
-                    <p className="mt-1.5 line-clamp-2 text-xs text-slate-500 leading-relaxed">
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500 leading-relaxed">
                       {docItem.subtitle}
                     </p>
                   ) : null}
+
+                  {/* Badges de Familias (Ocultos en móvil para minimalismo) */}
+                  {docItem.families && docItem.families.length > 0 ? (
+                    <div className="mt-2.5 hidden sm:flex flex-wrap gap-1">
+                      {docItem.families.slice(0, 3).map((f) => (
+                        <span key={f} className="chip text-[9.5px] py-0 px-1.5">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
-                <div className="mt-4 border-t border-slate-100 pt-3">
-                  <div className="mb-3 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                    <span className="truncate max-w-[170px]" title={docItem.file}>
+                <div className="mt-3 sm:mt-4 border-t border-slate-100 pt-2.5 sm:pt-3">
+                  <div className="mb-2.5 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                    <span className="truncate max-w-[150px] sm:max-w-[170px]" title={docItem.file}>
                       {docItem.file}
                     </span>
                     <span>{formatDate(docItem.updatedAt)}</span>
                   </div>
 
-                  <div className="flex items-center justify-between gap-1 pt-1">
+                  <div className="flex items-center justify-between gap-1">
                     <div className="flex items-center gap-1">
                       <Link
                         href={`/conocimiento/${encodeURIComponent(docItem.id)}`}
@@ -248,6 +349,14 @@ export default async function KnowledgePage({
                       >
                         Leer
                       </Link>
+
+                      <a
+                        href={`/api/knowledge/${encodeURIComponent(docItem.id)}/pdf?download=1`}
+                        className="btn-ghost text-xs p-1 text-slate-600 hover:text-slate-900"
+                        title="Descargar documento en PDF"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
 
                       <Link
                         href={`/conocimiento/${encodeURIComponent(docItem.id)}/editar`}
@@ -260,7 +369,7 @@ export default async function KnowledgePage({
                       <Link
                         href={`/knowledge/${docItem.file}`}
                         target="_blank"
-                        className="btn-ghost text-xs p-1 text-slate-500 hover:text-slate-800"
+                        className="btn-ghost text-xs p-1 text-slate-500 hover:text-slate-800 hidden sm:inline-flex"
                         title="Ver archivo .md crudo"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
@@ -283,7 +392,7 @@ export default async function KnowledgePage({
                         className="text-[11px] font-medium text-slate-400"
                         title="Documento protegido por el sistema"
                       >
-                        Protegido
+                        Base
                       </span>
                     )}
                   </div>
@@ -294,25 +403,33 @@ export default async function KnowledgePage({
         </div>
       )}
 
-      {/* Visor Rápido Integrado del Documento Activo */}
+      {/* Visor Rápido Integrado del Documento Activo (Oculto en móvil, activo solo en desktop grande) */}
       {activeMeta ? (
-        <div className="space-y-4 pt-4 border-t border-slate-200">
+        <div className="hidden lg:block space-y-4 pt-4 border-t border-slate-200">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-600">
-                Lectura Rápida
+                Lectura Rápida · {activeMeta.category}
               </p>
               <h2 className="text-lg font-semibold tracking-tight text-slate-900">
                 {activeMeta.title}
               </h2>
             </div>
             <div className="flex items-center gap-2">
+              <a
+                href={`/api/knowledge/${encodeURIComponent(activeMeta.id)}/pdf?download=1`}
+                className="btn-secondary text-xs inline-flex items-center gap-1.5"
+                title="Descargar documento en PDF"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Descargar PDF
+              </a>
               <Link
                 href={`/conocimiento/${encodeURIComponent(activeMeta.id)}`}
                 className="btn-secondary text-xs inline-flex items-center gap-1.5"
               >
                 <FileText className="h-3.5 w-3.5" />
-                Abrir en página completa
+                Página completa
               </Link>
               <Link
                 href={`/conocimiento/${encodeURIComponent(activeMeta.id)}/editar`}
@@ -326,8 +443,11 @@ export default async function KnowledgePage({
 
           <SpectrumCard padding="md">
             <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
-              <span className="badge badge-blue">{activeMeta.file}</span>
-              <span className="chip">Actualizado: {formatDate(activeMeta.updatedAt)}</span>
+              <span className="badge badge-blue">{activeMeta.category}</span>
+              <span className="badge badge-gray">{activeMeta.file}</span>
+              {activeMeta.families.map((f) => (
+                <span key={f} className="chip">{f}</span>
+              ))}
               <span className="chip">{(activeMeta.size / 1024).toFixed(1)} KB</span>
             </div>
             <div className="prose prose-slate max-w-none">

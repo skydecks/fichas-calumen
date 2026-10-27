@@ -1,6 +1,5 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ReactNode } from "react";
 
 export function AiMarkdown({
   content,
@@ -52,9 +51,34 @@ export function AiMarkdown({
             <blockquote className="my-2 border-l-2 border-brand-300 pl-3 text-slate-600">{children}</blockquote>
           ),
           hr: () => <hr className="my-3 border-slate-200" />,
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer" className="text-brand-600 underline underline-offset-2">{children}</a>
-          ),
+          a: ({ href, children }) => {
+            const isKnowledge =
+              href &&
+              (href.startsWith("/conocimiento") ||
+                href.includes("/conocimiento/"));
+            if (isKnowledge) {
+              return (
+                <a
+                  href={href}
+                  className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 border border-brand-200 transition-colors mx-0.5 no-underline"
+                  title="Abrir artículo en la base de conocimiento de Calumen"
+                >
+                  <span className="text-[10px]">📖</span>
+                  <span>{children}</span>
+                </a>
+              );
+            }
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-600 underline underline-offset-2 hover:text-brand-800"
+              >
+                {children}
+              </a>
+            );
+          },
           code: ({ children }) => (
             <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">{children}</code>
           ),

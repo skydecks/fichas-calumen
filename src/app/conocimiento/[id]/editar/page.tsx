@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import { updateKnowledgeArticleAction } from "@/app/actions";
-import { getKnowledgeDocMeta, getKnowledgeDocument } from "@/lib/ai-knowledge";
+import {
+  getKnowledgeDocMeta,
+  getKnowledgeDocument,
+  parseFrontmatter,
+} from "@/lib/ai-knowledge";
 import { KnowledgeEditor } from "@/components/KnowledgeEditor";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +25,8 @@ export default async function EditKnowledgePage({
     notFound();
   }
 
-  const content = getKnowledgeDocument(meta.file);
+  const rawContent = getKnowledgeDocument(meta.file);
+  const { body } = parseFrontmatter(rawContent);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -47,7 +52,10 @@ export default async function EditKnowledgePage({
           subtitle: meta.subtitle,
           fileName: meta.file,
           originalFileName: meta.file,
-          content,
+          category: meta.category,
+          families: meta.families,
+          standards: meta.standards,
+          content: body,
         }}
         cancelHref={`/conocimiento/${encodeURIComponent(meta.id)}`}
       />

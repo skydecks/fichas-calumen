@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BookOpen, ShieldCheck } from "lucide-react";
+import { findKnowledgeForComposition } from "@/lib/ai-knowledge";
 import {
   deleteSpecAction,
   duplicateSpecAction,
@@ -45,6 +47,7 @@ export default async function SpecDetailPage({
   if (!spec) notFound();
 
   const data = specToData(spec);
+  const suggestedKnowledge = findKnowledgeForComposition(data.layers);
 
   return (
     <div>
@@ -69,6 +72,14 @@ export default async function SpecDetailPage({
               <IconDownload width={16} height={16} />
               Descargar PDF
             </a>
+            <Link
+              href={`/conocimiento/nuevo?from=spec&id=${spec.id}`}
+              className="btn-secondary"
+              title="Documentar esta composición en un artículo de conocimiento"
+            >
+              <BookOpen className="h-4 w-4" />
+              Documentar en Conocimiento
+            </Link>
             <form action={duplicateSpecAction}>
               <input type="hidden" name="id" value={spec.id} />
               <button type="submit" className="btn-secondary">
@@ -109,6 +120,30 @@ export default async function SpecDetailPage({
           Ver PDF guardado
         </a>
       </div>
+
+      {suggestedKnowledge.length > 0 ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/60 px-4 py-2.5 text-xs text-sky-950">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-sky-600" />
+            <span className="font-semibold text-sky-900">
+              Normas y Artículos sugeridos para esta composición:
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {suggestedKnowledge.map((item) => (
+              <Link
+                key={item.id}
+                href={`/conocimiento/${encodeURIComponent(item.id)}`}
+                target="_blank"
+                className="chip bg-white/90 hover:bg-white text-sky-800 border border-sky-200 font-medium inline-flex items-center gap-1 shadow-2xs transition"
+              >
+                <span>📖</span>
+                <span>{item.title}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <SpecWorkbench
         specId={spec.id}

@@ -10,9 +10,14 @@ import {
   HardDrive,
   ShieldCheck,
   CheckCircle2,
+  Download,
 } from "lucide-react";
 import { AiMarkdown } from "@/lib/ai-markdown";
-import { getKnowledgeDocMeta, getKnowledgeDocument } from "@/lib/ai-knowledge";
+import {
+  getKnowledgeDocMeta,
+  getKnowledgeDocument,
+  parseFrontmatter,
+} from "@/lib/ai-knowledge";
 import { PageHeader } from "@/components/ui";
 import { SpectrumCard } from "@/components/spectrum/card";
 import { ConfirmButton } from "@/components/SubmitButton";
@@ -37,7 +42,8 @@ export default async function KnowledgeDetailPage({
     notFound();
   }
 
-  const content = getKnowledgeDocument(meta.file);
+  const rawContent = getKnowledgeDocument(meta.file);
+  const { body } = parseFrontmatter(rawContent);
   const fileSizeKb = (meta.size / 1024).toFixed(1);
 
   return (
@@ -51,12 +57,16 @@ export default async function KnowledgeDetailPage({
           Volver a la base de conocimiento
         </Link>
 
-        {meta.isDefault ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Norma Oficial Mexicana (Base)
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {meta.isDefault ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Norma Oficial Mexicana (Base)
+            </span>
+          ) : (
+            <span className="badge badge-blue">{meta.category}</span>
+          )}
+        </div>
       </div>
 
       {creado ? (
@@ -74,11 +84,20 @@ export default async function KnowledgeDetailPage({
       ) : null}
 
       <PageHeader
-        eyebrow="Base de conocimiento"
+        eyebrow={`Base de conocimiento · ${meta.category}`}
         title={meta.title}
         subtitle={meta.subtitle || `Archivo técnico ${meta.file}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/api/knowledge/${encodeURIComponent(meta.id)}/pdf?download=1`}
+              className="btn-secondary text-xs inline-flex items-center gap-1.5 border-brand-300 text-brand-700 hover:bg-brand-50"
+              title="Descargar documento técnico en formato PDF"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Descargar PDF
+            </a>
+
             <Link
               href={`/conocimiento/${encodeURIComponent(meta.id)}/editar`}
               className="btn-secondary text-xs inline-flex items-center gap-1.5"
@@ -113,27 +132,43 @@ export default async function KnowledgeDetailPage({
       />
 
       {/* Barra de Ficha Técnica / Metadatos */}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-xs text-slate-600">
-        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-slate-800">
-          <FileText className="h-3.5 w-3.5 text-brand-600" />
-          {meta.file}
-        </span>
-        <span className="text-slate-300">·</span>
-        <span className="inline-flex items-center gap-1.5">
-          <HardDrive className="h-3.5 w-3.5 text-slate-400" />
-          {fileSizeKb} KB
-        </span>
-        <span className="text-slate-300">·</span>
-        <span className="inline-flex items-center gap-1.5">
-          <Calendar className="h-3.5 w-3.5 text-slate-400" />
-          Actualizado {formatDate(meta.updatedAt)}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-xs text-slate-600">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-slate-800">
+            <FileText className="h-3.5 w-3.5 text-brand-600" />
+            {meta.file}
+          </span>
+          <span className="text-slate-300">·</span>
+          <span className="inline-flex items-center gap-1.5">
+            <HardDrive className="h-3.5 w-3.5 text-slate-400" />
+            {fileSizeKb} KB
+          </span>
+          <span className="hidden sm:inline-flex text-slate-300">·</span>
+          <span className="hidden sm:inline-flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            Actualizado {formatDate(meta.updatedAt)}
+          </span>
+        </div>
+
+        {/* Chips de Familias de Vidrio */}
+        {meta.families && meta.families.length > 0 ? (
+          <div className="hidden sm:flex flex-wrap items-center gap-1.5">
+            {meta.families.map((f) => (
+              <span key={f} className="chip text-[10px]">
+                {f}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* Contenido Renderizado */}
       <SpectrumCard padding="md">
         <div className="prose prose-slate max-w-none">
-          <AiMarkdown content={content} className="text-[13px] text-slate-700 leading-relaxed" />
+          <AiMarkdown
+            content={body}
+            className="text-[13px] text-slate-700 leading-relaxed"
+          />
         </div>
       </SpectrumCard>
     </div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BookOpen } from "lucide-react";
 import { deleteProductAction } from "@/app/actions";
 import { ConfirmButton } from "@/components/SubmitButton";
 import { IconArrowLeft, IconSparkles, IconTrash } from "@/components/icons";
@@ -72,6 +73,14 @@ export default async function ProductDetailPage({
             >
               <IconSparkles width={16} height={16} />
               Consultar con IA
+            </Link>
+            <Link
+              href={`/conocimiento/nuevo?from=product&id=${product.id}`}
+              className="btn-secondary"
+              title="Crear guía técnica en Markdown a partir de este producto"
+            >
+              <BookOpen className="h-4 w-4" />
+              Documentar en Conocimiento
             </Link>
             <form action={deleteProductAction}>
               <input type="hidden" name="id" value={product.id} />

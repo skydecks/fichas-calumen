@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bold,
@@ -18,24 +18,39 @@ import {
   Columns,
   Sparkles,
   FileText,
+  Upload,
+  Loader2,
+  CheckCircle2,
+  ShieldAlert,
+  Wand2,
 } from "lucide-react";
 import { AiMarkdown } from "@/lib/ai-markdown";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Field } from "@/components/ui";
 import { SpectrumCard } from "@/components/spectrum/card";
+import {
+  GLASS_FAMILIES,
+  KNOWLEDGE_CATEGORIES,
+  type KnowledgeCategory,
+} from "@/lib/knowledge-types";
 
 export type KnowledgeFormValues = {
   fileName?: string;
   originalFileName?: string;
   title?: string;
   subtitle?: string;
+  category?: KnowledgeCategory;
+  families?: string[];
+  standards?: string[];
   content?: string;
 };
 
-const TEMPLATES: Record<string, { label: string; content: string; subtitle: string }> = {
+const TEMPLATES: Record<string, { label: string; content: string; subtitle: string; category: KnowledgeCategory; families: string[] }> = {
   norma: {
-    label: "Norma Técnica (Oficial o Internacional)",
+    label: "Norma Técnica Oficial",
     subtitle: "Especificaciones, clasificación y métodos de evaluación para acristalamiento.",
+    category: "Norma Oficial",
+    families: ["Vidrio Templado", "Vidrio de Seguridad y Contención"],
     content: `## Ficha normativa
 
 - **Clave:** CLAVE-NORMA-AÑO
@@ -69,8 +84,10 @@ Describe detalladamente a qué tipos de vidrios, espesores y configuraciones apl
 `,
   },
   guia: {
-    label: "Guía de Producto y Acristalamiento",
+    label: "Guía de Producto y Prestaciones",
     subtitle: "Criterios técnicos, prestaciones recomendadas y recomendaciones de especificación.",
+    category: "Guía de Producto",
+    families: ["Control Solar y Low-E", "Doble Acristalamiento (DGU)"],
     content: `## Descripción técnica
 
 Presentación del producto o familia de vidrios, tecnología de capa (magnetrónica, pirolítica o masa) y propósito principal (control solar, aislamiento acústico o térmico).
@@ -96,24 +113,25 @@ Presentación del producto o familia de vidrios, tecnología de capa (magnetrón
 3. Compatibilidad química estricta de selladores estructurales con el intercalario y los bordes.
 `,
   },
-  procedimiento: {
-    label: "Criterio de Validación Técnica",
-    subtitle: "Procedimiento interno de verificación para cotizaciones y fichas de especificación.",
+  instalacion: {
+    label: "Criterio de Instalación y Montaje",
+    subtitle: "Requisitos de calzado, sellado perimetral y tolerancias en obra.",
+    category: "Criterio de Instalación",
+    families: ["Vidrio Laminado", "Vidrio Templado"],
     content: `## Objetivo
 
-Establecer los pasos obligatorios para validar las composiciones de vidrio antes de la emisión oficial de fichas técnicas en Calumen.
+Definir los lineamientos y precauciones para la correcta instalación en cancelería o muros cortina, evitando roturas térmicas o delaminación.
 
-## Criterios de verificación
+## Criterios de calzado de apoyo y laterales
 
-1. **Validación de espesores vs dimensiones:** Revisar relación de aspecto y presión de viento proyectada.
-2. **Riesgo de rotura térmica:** Verificar si el vidrio requiere templado o termoendurecido debido a absorción solar superior al 50%.
-3. **Compatibilidad de capas:** Verificar cara de depósito (Cara #2 o #3 en unidades de doble acristalamiento).
+1. **Ubicación:** Calzos de apoyo situados a un décimo de la longitud de la base (L/10), mínimo a 50 mm de las esquinas.
+2. **Material:** EPDM o silicona de dureza Shore A 70 a 80.
+3. **Holguras perimetrales:** Mínimo 5 mm en todo el contorno para permitir dilatación térmica.
 
-## Procedimiento de emisión
+## Compatibilidad de selladores
 
-1. Calcular el vidrio en el espectro fotométrico validado.
-2. Contrastar valores de transmitancia Ug y factor solar con los requerimientos del proyecto.
-3. Asignar estado EMITIDA únicamente cuando todos los datos de pruebas o catálogo cuenten con soporte técnico.
+- Prohibido el contacto de siliconas acéticas con los bordes de vidrio laminado (riesgo de ataque químico al PVB).
+- Utilizar exclusivamente selladores de curado neutro compatibles con la barrera de estanqueidad de unidades aislantes.
 `,
   },
 };
@@ -139,12 +157,56 @@ export function KnowledgeEditor({
   cancelHref?: string;
 }) {
   const contentId = useId();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [title, setTitle] = useState(initialValues.title ?? "");
   const [subtitle, setSubtitle] = useState(initialValues.subtitle ?? "");
   const [fileName, setFileName] = useState(initialValues.fileName ?? "");
   const [isAutoFileName, setIsAutoFileName] = useState(!initialValues.fileName);
+  const [category, setCategory] = useState<KnowledgeCategory>(
+    initialValues.category ?? "Guía de Producto",
+  );
+  const [families, setFamilies] = useState<string[]>(
+    initialValues.families ?? ["Vidrio Templado"],
+  );
+  const [standards, setStandards] = useState<string>(
+    initialValues.standards ? initialValues.standards.join(", ") : "",
+  );
   const [content, setContent] = useState(initialValues.content ?? "");
   const [viewMode, setViewMode] = useState<"edit" | "split" | "preview">("split");
+
+  // Estados de IA y Copiloto
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiStatusMessage, setAiStatusMessage] = useState("");
+  const [isImportingPdf, setIsImportingPdf] = useState(false);
+  const [complianceResult, setComplianceResult] = useState<{
+    score: number;
+    strengths: string[];
+    improvements: string[];
+    missingStandards: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || isEditing) return;
+    const raw = sessionStorage.getItem("calumen_imported_pdf");
+    if (raw) {
+      try {
+        const data = JSON.parse(raw);
+        if (data.title) setTitle(data.title);
+        if (data.subtitle) setSubtitle(data.subtitle);
+        if (data.category) setCategory(data.category);
+        if (data.families && data.families.length > 0) setFamilies(data.families);
+        if (data.standards && data.standards.length > 0) setStandards(data.standards.join(", "));
+        if (data.suggestedFileName) setFileName(data.suggestedFileName);
+        if (data.content) setContent(data.content);
+        setViewMode("split");
+      } catch {
+        // ignorar
+      } finally {
+        sessionStorage.removeItem("calumen_imported_pdf");
+      }
+    }
+  }, [isEditing]);
 
   const handleTitleChange = (newTitle: string) => {
     setTitle(newTitle);
@@ -152,6 +214,12 @@ export function KnowledgeEditor({
       const slug = slugify(newTitle);
       setFileName(slug ? `${slug}.md` : "");
     }
+  };
+
+  const toggleFamily = (fam: string) => {
+    setFamilies((prev) =>
+      prev.includes(fam) ? prev.filter((f) => f !== fam) : [...prev, fam],
+    );
   };
 
   const handleTemplateSelect = (key: string) => {
@@ -163,6 +231,8 @@ export function KnowledgeEditor({
     }
     setContent(t.content);
     if (!subtitle) setSubtitle(t.subtitle);
+    setCategory(t.category);
+    setFamilies(t.families);
   };
 
   const insertMarkdown = (before: string, after: string = "", placeholder: string = "") => {
@@ -190,6 +260,100 @@ export function KnowledgeEditor({
     }, 10);
   };
 
+  // Copiloto: Llamar endpoint de IA para generar borrador o enriquecer
+  const callAiAssist = async (copilotAction: "generate_draft" | "improve_technical" | "add_table" | "validate_compliance") => {
+    if (copilotAction === "generate_draft" && !title.trim()) {
+      alert("Por favor escribe primero un título para que la IA genere el borrador.");
+      return;
+    }
+
+    setIsAiLoading(true);
+    setAiStatusMessage(
+      copilotAction === "generate_draft"
+        ? "Generando borrador técnico con IA..."
+        : copilotAction === "improve_technical"
+          ? "Enriqueciendo rigor técnico y tablas..."
+          : copilotAction === "add_table"
+            ? "Generando tabla de prestaciones sugeridas..."
+            : "Validando cumplimiento técnico y normativo...",
+    );
+
+    try {
+      const res = await fetch("/api/ai/knowledge-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: copilotAction,
+          title,
+          subtitle,
+          category,
+          families,
+          content,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        alert(data.error || "No se pudo completar la acción con IA.");
+        return;
+      }
+
+      if (copilotAction === "validate_compliance") {
+        setComplianceResult(data.compliance);
+      } else if (copilotAction === "add_table") {
+        insertMarkdown(`\n\n${data.markdown}\n\n`);
+      } else if (copilotAction === "improve_technical" || copilotAction === "generate_draft") {
+        setContent(data.markdown);
+      }
+    } catch (err: any) {
+      alert(`Error al conectar con el Asistente IA: ${err.message}`);
+    } finally {
+      setIsAiLoading(false);
+      setAiStatusMessage("");
+    }
+  };
+
+  // Importador de PDF a Markdown
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingPdf(true);
+    setAiStatusMessage("Extrayendo y estructurando PDF a Markdown con IA...");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/knowledge/import-pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        alert(data.error || "No se pudo importar el PDF.");
+        return;
+      }
+
+      if (data.title) setTitle(data.title);
+      if (data.subtitle) setSubtitle(data.subtitle);
+      if (data.category) setCategory(data.category);
+      if (data.families && data.families.length > 0) setFamilies(data.families);
+      if (data.standards && data.standards.length > 0) setStandards(data.standards.join(", "));
+      if (data.suggestedFileName && !isEditing) setFileName(data.suggestedFileName);
+      if (data.content) setContent(data.content);
+
+      setViewMode("split");
+    } catch (err: any) {
+      alert(`Error al procesar el PDF: ${err.message}`);
+    } finally {
+      setIsImportingPdf(false);
+      setAiStatusMessage("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
   const charCount = content.length;
   const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
@@ -204,8 +368,90 @@ export function KnowledgeEditor({
         />
       ) : null}
 
-      {/* Tarjeta de Metadatos */}
+      {/* Inputs ocultos de categorización para el Server Action */}
+      <input type="hidden" name="category" value={category} />
+      <input type="hidden" name="families" value={families.join(", ")} />
+      <input type="hidden" name="standards" value={standards} />
+
+      {/* Input oculto para carga de PDF */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={handlePdfUpload}
+      />
+
+      {/* Banner de Estado de IA / Carga */}
+      {(isAiLoading || isImportingPdf) && (
+        <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 p-4 text-xs font-medium text-brand-800 shadow-xs">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+          <span>{aiStatusMessage}</span>
+        </div>
+      )}
+
+      {/* Panel de Validación Técnica (si se evaluó con IA) */}
+      {complianceResult && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-950 shadow-xs">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-semibold text-emerald-800">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              Evaluación Técnica de Rigor (IA): Puntuación {complianceResult.score}/100
+            </span>
+            <button
+              type="button"
+              onClick={() => setComplianceResult(null)}
+              className="text-slate-400 hover:text-slate-600"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="font-semibold text-emerald-800">Puntos Fuertes:</p>
+              <ul className="mt-1 list-disc pl-4 text-slate-700">
+                {complianceResult.strengths.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold text-amber-800">Sugerencias de Mejora:</p>
+              <ul className="mt-1 list-disc pl-4 text-slate-700">
+                {complianceResult.improvements.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tarjeta de Metadatos y Clasificación */}
       <SpectrumCard padding="md">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Metadatos y Clasificación Técnica
+            </h3>
+            <p className="text-xs text-slate-500">
+              Información de indexación para el repositorio y el Asistente IA.
+            </p>
+          </div>
+          {!isEditing ? (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImportingPdf}
+              className="btn-secondary text-xs inline-flex items-center gap-1.5 border-dashed border-brand-300 bg-brand-50/50 hover:bg-brand-50 text-brand-700"
+            >
+              <Upload className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden sm:inline">Importar Ficha desde PDF</span>
+              <span className="sm:hidden">Subir PDF</span>
+            </button>
+          ) : null}
+        </div>
+
         <div className="grid gap-5 sm:grid-cols-2">
           <Field
             label="Título del artículo *"
@@ -218,7 +464,7 @@ export function KnowledgeEditor({
               required
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder="Ej. NOM-146-SCFI-2016 — Vidrio de seguridad o Guía de Doble Acristalamiento"
+              placeholder="Ej. NOM-146-SCFI-2016 — Vidrio de seguridad o Guía de Doble Acristalamiento Solar"
               className="input text-base font-medium"
             />
           </Field>
@@ -236,6 +482,25 @@ export function KnowledgeEditor({
               placeholder="Resumen o especificaciones de referencia"
               className="input"
             />
+          </Field>
+
+          <Field
+            label="Categoría del documento *"
+            htmlFor="category_select"
+            className="sm:col-span-1"
+          >
+            <select
+              id="category_select"
+              value={category}
+              onChange={(e) => setCategory(e.target.value as KnowledgeCategory)}
+              className="input"
+            >
+              {KNOWLEDGE_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field
@@ -272,19 +537,54 @@ export function KnowledgeEditor({
                 </button>
               ) : null}
             </div>
-            <p className="mt-1 text-[11px] text-slate-400">
-              {isEditing
-                ? "El nombre del archivo no puede modificarse en modo edición."
-                : "Se guardará directamente en /public/knowledge/ y se indexará en el Asistente IA."}
-            </p>
+          </Field>
+
+          <Field
+            label="Normas técnicas relacionadas (separadas por coma)"
+            htmlFor="standards_input"
+            className="sm:col-span-1"
+          >
+            <input
+              id="standards_input"
+              value={standards}
+              onChange={(e) => setStandards(e.target.value)}
+              placeholder="Ej. NOM-146-SCFI-2016, EN 410, EN 673, NFRC 100"
+              className="input text-xs"
+            />
           </Field>
         </div>
 
-        {/* Selector de Plantilla (solo en creación o si desea aplicar plantilla) */}
+        {/* Selector de Familias de Vidrio */}
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <span className="text-xs font-semibold text-slate-600 block mb-2">
+            Familias de vidrio aplicables:
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {GLASS_FAMILIES.map((fam) => {
+              const active = families.includes(fam);
+              return (
+                <button
+                  key={fam}
+                  type="button"
+                  onClick={() => toggleFamily(fam)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                    active
+                      ? "bg-brand-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {fam}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Selector de Plantilla */}
         {!isEditing ? (
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
             <span className="text-xs font-semibold text-slate-500">
-              Cargar plantilla rápida:
+              Plantillas base:
             </span>
             {Object.entries(TEMPLATES).map(([key, item]) => (
               <button
@@ -378,7 +678,7 @@ export function KnowledgeEditor({
             </button>
             <button
               type="button"
-              onClick={() => insertMarkdown("```\n", "\n```\n", "código o especificación")}
+              onClick={() => insertMarkdown("```\n", "\n```\n", "especificación")}
               className="rounded p-1.5 text-slate-600 hover:bg-slate-200/80 transition"
               title="Bloque de código"
             >
@@ -396,44 +696,82 @@ export function KnowledgeEditor({
             </button>
           </div>
 
-          {/* Selector de Modos de Vista */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
+          {/* Botones de Copiloto IA */}
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setViewMode("edit")}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
-                viewMode === "edit"
-                  ? "bg-brand-50 text-brand-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              onClick={() => callAiAssist("generate_draft")}
+              disabled={isAiLoading}
+              className="btn-ghost text-xs px-2 py-1 text-purple-700 hover:bg-purple-50 inline-flex items-center gap-1 border border-purple-200 rounded"
+              title="Generar borrador técnico completo asistido por IA"
             >
-              <Edit3 className="h-3.5 w-3.5" />
-              Editor
+              <Wand2 className="h-3.5 w-3.5 text-purple-600" />
+              Borrador con IA
             </button>
+
             <button
               type="button"
-              onClick={() => setViewMode("split")}
-              className={`hidden sm:flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
-                viewMode === "split"
-                  ? "bg-brand-50 text-brand-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              onClick={() => callAiAssist("add_table")}
+              disabled={isAiLoading}
+              className="btn-ghost text-xs px-2 py-1 text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1 border border-slate-200 rounded"
+              title="Generar tabla de valores recomendados con IA"
             >
-              <Columns className="h-3.5 w-3.5" />
-              Dividido
+              <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+              Tabla IA
             </button>
+
             <button
               type="button"
-              onClick={() => setViewMode("preview")}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
-                viewMode === "preview"
-                  ? "bg-brand-50 text-brand-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              onClick={() => callAiAssist("validate_compliance")}
+              disabled={isAiLoading}
+              className="btn-ghost text-xs px-2 py-1 text-emerald-700 hover:bg-emerald-50 inline-flex items-center gap-1 border border-emerald-200 rounded"
+              title="Validar rigor técnico y normas"
             >
-              <Eye className="h-3.5 w-3.5" />
-              Vista previa
+              <ShieldAlert className="h-3.5 w-3.5 text-emerald-600" />
+              Validar Rigor
             </button>
+
+            <span className="mx-1 h-4 w-px bg-slate-300" />
+
+            {/* Selector de Modos de Vista */}
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("edit")}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
+                  viewMode === "edit"
+                    ? "bg-brand-50 text-brand-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+                Editor
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("split")}
+                className={`hidden sm:flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
+                  viewMode === "split"
+                    ? "bg-brand-50 text-brand-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Columns className="h-3.5 w-3.5" />
+                Dividido
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("preview")}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
+                  viewMode === "preview"
+                    ? "bg-brand-50 text-brand-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Vista previa
+              </button>
+            </div>
           </div>
         </div>
 
@@ -445,7 +783,6 @@ export function KnowledgeEditor({
               : "grid-cols-1"
           }`}
         >
-          {/* Panel Editor */}
           {viewMode !== "preview" ? (
             <div className="flex flex-col p-4">
               <textarea
@@ -460,7 +797,6 @@ export function KnowledgeEditor({
             </div>
           ) : null}
 
-          {/* Panel Vista Previa */}
           {viewMode !== "edit" ? (
             <div className="flex flex-col bg-slate-50/40 p-5 overflow-y-auto max-h-[700px]">
               <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
@@ -475,6 +811,12 @@ export function KnowledgeEditor({
                 <div className="prose prose-sm max-w-none text-slate-700">
                   {title ? (
                     <div className="mb-4 border-b border-slate-200 pb-3">
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="badge badge-blue">{category}</span>
+                        {families.map((f) => (
+                          <span key={f} className="chip">{f}</span>
+                        ))}
+                      </div>
                       <h1 className="text-xl font-bold tracking-tight text-slate-900">
                         {title}
                       </h1>
@@ -507,7 +849,7 @@ export function KnowledgeEditor({
           <div className="flex items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
             <span className="text-[11px] text-slate-600">
-              Formato compatible con Asistente IA (NIM & Gemini)
+              YAML Frontmatter y GFM compatibles con Asistente IA (NIM & Gemini)
             </span>
           </div>
         </div>

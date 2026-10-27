@@ -289,15 +289,28 @@ export async function createKnowledgeArticleAction(form: FormData) {
   const fileName = text(form, "fileName");
   const content = text(form, "content");
   const subtitle = text(form, "subtitle");
+  const category = text(form, "category") as any;
+  const familiesRaw = text(form, "families");
+  const standardsRaw = text(form, "standards");
 
   if (!title || !content) {
     redirect("/conocimiento/nuevo?error=campos_requeridos");
   }
 
+  const families = familiesRaw
+    ? familiesRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+  const standards = standardsRaw
+    ? standardsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+
   const saved = saveKnowledgeDocument({
     title,
     subtitle: nullable(subtitle) ?? undefined,
     fileName: nullable(fileName) ?? undefined,
+    category: nullable(category) ? category : undefined,
+    families,
+    standards,
     content,
   });
 
@@ -311,15 +324,28 @@ export async function updateKnowledgeArticleAction(form: FormData) {
   const title = text(form, "title");
   const content = text(form, "content");
   const subtitle = text(form, "subtitle");
+  const category = text(form, "category") as any;
+  const familiesRaw = text(form, "families");
+  const standardsRaw = text(form, "standards");
 
   if (!originalFileName || !title || !content) {
     redirect("/conocimiento");
   }
 
+  const families = familiesRaw
+    ? familiesRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+  const standards = standardsRaw
+    ? standardsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+
   const saved = saveKnowledgeDocument({
     fileName: originalFileName,
     title,
     subtitle: nullable(subtitle) ?? undefined,
+    category: nullable(category) ? category : undefined,
+    families,
+    standards,
     content,
   });
 
