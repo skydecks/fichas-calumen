@@ -28,7 +28,7 @@ export default async function ProductsPage() {
         subtitle="Sube la ficha técnica de cada producto. La IA extrae su composición y prestaciones para usarlas en fichas y predicciones."
         actions={
           <>
-            <Link href="/asistente" className="btn-secondary">
+            <Link href="/asistente" className="btn-secondary hidden sm:inline-flex">
               <IconSparkles width={16} height={16} />
               Consultar IA
             </Link>
@@ -36,7 +36,7 @@ export default async function ProductsPage() {
         }
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <SpectrumCard padding="sm">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Productos
@@ -49,7 +49,7 @@ export default async function ProductsPage() {
           </p>
           <p className="mt-1 text-2xl font-semibold text-brand-600">{active}</p>
         </SpectrumCard>
-        <SpectrumCard padding="sm">
+        <SpectrumCard padding="sm" className="hidden sm:block">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Fuente
           </p>

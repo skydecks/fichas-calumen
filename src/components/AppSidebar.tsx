@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
@@ -28,6 +29,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -59,7 +61,13 @@ const systemLinks = [
 
 export default function AppSidebar() {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
   const settings = useAppSettings();
+
+  // En móvil, el menú es un panel emergente: ciérralo en cuanto cambia la ruta.
+  useEffect(() => {
+    setOpenMobile(false);
+  }, [pathname, setOpenMobile]);
   const appName = settings.appName || "Fichas técnicas";
   const organization = [settings.organizationName, settings.organizationTagline]
     .filter(Boolean)

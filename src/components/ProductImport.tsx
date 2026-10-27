@@ -210,7 +210,7 @@ export default function ProductImport() {
             <p className="text-sm font-semibold text-slate-900">
               Agregar producto al catálogo
             </p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+            <p className="mt-0.5 hidden text-[11px] leading-relaxed text-slate-500 sm:block">
               Arrastra una ficha técnica en PDF o una imagen clara. La IA
               extraerá nombre, composición, prestaciones y valores clave.
             </p>
